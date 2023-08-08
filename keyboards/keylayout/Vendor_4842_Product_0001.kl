@@ -1,0 +1,22 @@
+#新固件
+key 28  DPAD_CENTER       
+key 1   BACK  
+#老固件
+key 158   BACK 
+key 353   DPAD_CENTER 
+
+key 103   DPAD_UP
+key 104   PAGE_UP
+key 105   DPAD_LEFT
+key 106   DPAD_RIGHT
+key 108   DPAD_DOWN
+key 109   PAGE_DOWN
+key 116   POWER
+key 127   MENU
+key 164   MEDIA_PLAY_PAUSE
+key 172   HOME
+
+key 113   VOLUME_MUTE
+key 114   VOLUME_DOWN
+key 115   VOLUME_UP
+key 14    DEL

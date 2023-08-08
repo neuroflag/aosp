@@ -1,0 +1,27 @@
+#!/system/bin/sh
+
+ret=0
+if [ -x /system/bin/wl ];then
+        ret=`wl btc_mode`
+
+        if [ $ret != '5' ];then
+                echo "btc_mode return value is not 5"
+                wl btc_mode 5
+                ret=`wl btc_mode`
+
+                if [ $ret != '5' ];then
+                        echo "set btc_mode as 5 fail"
+                        exit -1
+                else
+                        echo "set btc_mode as 5 success"
+                fi
+        else
+                echo "btc_mode is 5"
+        fi
+else
+        echo "wl command is not exist"
+        exit -1
+fi
+
+exit 0
+

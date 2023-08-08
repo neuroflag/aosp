@@ -1,0 +1,25 @@
+#!/system/bin/sh
+
+start_wan_to_lan(){
+	IP_SEGMENT=$(getprop "persist.net.wan_to_lan_ip_segment")
+    if [ -z "$IP_SEGMENT" ];then
+        IP_SEGMENT="192.168.101"
+    fi
+	ip rule add from all lookup main pref 9999
+	ndc ipfwd enable eth0
+	ndc nat enable eth0 eth1 1 $IP_SEGMENT.1/24
+	iptables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8
+	iptables -t nat -I PREROUTING -i eth0 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8
+	while true;do
+		ip rule show | grep eth1 
+		if [ "$?" != "0" ];then
+			sleep 1
+			continue
+		else
+			ip rule add from all lookup eth1 pref 22000
+			break
+		fi
+	done
+}
+
+start_wan_to_lan

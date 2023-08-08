@@ -1,0 +1,17 @@
+key 127   MENU
+key 28    DPAD_CENTER
+key 116   POWER             
+key 158   BACK              
+key 139   MENU         
+key 217   SEARCH             
+key 232   DPAD_CENTER       
+key 108   DPAD_DOWN         
+key 103   DPAD_UP           
+key 102   HOME              
+key 105   DPAD_LEFT         
+key 106   DPAD_RIGHT        
+key 115   VOLUME_UP
+key 114   VOLUME_DOWN
+key 143   NOTIFICATION      
+key 113   VOLUME_MUTE
+key 63    VOICE_ASSIST

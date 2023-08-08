@@ -1,0 +1,29 @@
+#!/system/bin/sh
+
+
+IP_SEGMENT=$(getprop "persist.net.wan_to_lan_ip_segment")
+if [ -z "$IP_SEGMENT" ];then
+    IP_SEGMENT="192.168.101"
+fi
+
+start_dhcp(){
+    /system/bin/dnsmasq --keep-in-foreground --interface=eth0  --bind-interfaces  --except-interface=lo,eth1  --no-resolv --no-poll --dhcp-authoritative --pid-file --dhcp-range=$IP_SEGMENT.2,$IP_SEGMENT.254,1h 
+}
+
+stop_work(){
+	ip rule del  pref 9999
+	ip rule del  pref 22000
+	ndc ipfwd disabled eth0
+	ndc nat disabled eth0 eth1 1 $IP_SEGMENT.1/24
+	iptables -t nat -D PREROUTING -i eth0 -p udp --dport 53 -j DNAT --to-destination 8.8.8.8
+	iptables -t nat -D PREROUTING -i eth0 -p tcp --dport 53 -j DNAT --to-destination 8.8.8.8
+}
+teardown () {
+    stop_work
+    trap - SIGTERM
+    kill -- -$$
+}
+trap 'teardown' SIGINT SIGTERM EXIT
+
+eth_wan_to_lan_detect &
+start_dhcp
