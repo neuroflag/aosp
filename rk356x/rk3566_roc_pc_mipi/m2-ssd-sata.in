@@ -1,0 +1,23 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    id      = <0x00000000>;             /* optional, must be zero if unused */
+    rev     = <0x00000000>;             /* optional, must be zero if unused */
+    custom0 = <0x03000001>;             /* type: file, m.2 ssd sata */
+    custom1 = <0x00000000>;             /* optional, must be zero if unused */
+    custom2 = <0x00000000>;             /* optional, must be zero if unused */
+    custom3 = <0x00000000>;             /* optional, must be zero if unused */
+};
+
+&chosen {
+    bootargs_ext = "androidboot.boot_devices=${_boot_device}";
+};
+
+&pcie2x1 {
+    status = "disabled";
+};
+
+&sata2 {
+    status = "okay";
+};

@@ -1,0 +1,6 @@
+type mode_switch, domain;
+type mode_switch_exec, exec_type, system_file_type,file_type;
+
+allow init mode_switch_exec:file { execute getattr read open };
+allow init mode_switch:process { transition };
+allow init mode_switch:process { rlimitinh siginh noatsecure };

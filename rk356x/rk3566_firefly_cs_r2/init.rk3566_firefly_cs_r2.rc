@@ -1,0 +1,3 @@
+on zygote-start
+    # for gps
+    chmod 0666 /dev/ttyS3

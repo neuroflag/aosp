@@ -1,0 +1,6 @@
+dontaudit init proc:file { write setattr };
+
+
+
+allow init su_exec:file { getattr open read };
+allow init sudaemon:process { noatsecure rlimitinh siginh transition };

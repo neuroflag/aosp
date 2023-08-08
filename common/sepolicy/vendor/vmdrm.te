@@ -1,0 +1,3 @@
+allow domain vmdrm_device:chr_file { open read write ioctl };
+allow ueventd vmdrm_device:chr_file setattr;
+

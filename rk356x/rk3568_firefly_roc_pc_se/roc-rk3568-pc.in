@@ -1,0 +1,46 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    id      = <0x00000001>;     //roc-3568-pc
+    rev     = <0x00000000>;
+    custom0 = <0x010103FF>;     //saradc  channel:1  value: 0x3FF
+    custom1 = <0x00000000>;
+    custom2 = <0x00000000>;
+    custom3 = <0x00000000>;
+
+};
+
+&dto{
+    status = "okay";
+    model = "ROC-RK3568-PC HDMI (Android)";
+    compatible = "rockchip,rk3568-firefly-roc-pc", "rockchip,rk3568";
+
+    roc-rk3568-pc-prop {
+        propname = "roc-rk3568-pc.prop";
+    };
+};
+
+&vcc_4g_power {
+    status = "disabled";
+};
+
+&vcc3v3_lcd1_n {
+    status = "okay";
+};
+
+&gmac0 {
+    wolirq-gpio = <&gpio2 24 1>; //RK_PD0 GPIO_ACTIVE_LOW
+};
+
+&gmac1 {
+    wolirq-gpio = <&gpio2 26 1>; //RK_PD2 GPIO_ACTIVE_LOW
+};
+
+&wireless_wlan {
+    wifi_chip_type = "ap6275s";
+};
+
+&chosen {
+    bootargs_ext = "androidboot.boot_devices=${_boot_device}";
+};

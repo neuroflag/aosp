@@ -1,0 +1,7 @@
+type clear_test, domain,coredomain; 
+type clear_test_exec, exec_type, system_file_type, file_type;
+
+#============= clear_test ==============
+allow clear_test clear_test_exec:file entrypoint;
+allow clear_test shell_exec:file { read execute };
+

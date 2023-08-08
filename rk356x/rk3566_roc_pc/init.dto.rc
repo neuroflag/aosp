@@ -1,0 +1,7 @@
+on property:persist.vendor.dto.configs=sata
+    write /data/vendor_de/dto_configs "1"
+    exec - system system -- /system/bin/sync
+
+on property:persist.vendor.dto.configs=pcie 
+    write /data/vendor_de/dto_configs "2"
+    exec - system system -- /system/bin/sync
