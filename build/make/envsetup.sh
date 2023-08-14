@@ -314,6 +314,21 @@ function setpaths()
     unset ANDROID_TARGET_OUT_TESTCASES
     export ANDROID_TARGET_OUT_TESTCASES=$(get_abs_build_var TARGET_OUT_TESTCASES)
 
+    unset TARGET_BOARD_PLATFORM_GPU
+    export TARGET_BOARD_PLATFORM_GPU=$(get_build_var TARGET_BOARD_PLATFORM_GPU)
+
+    unset TARGET_BOARD_PLATFORM
+    export TARGET_BOARD_PLATFORM=$(get_build_var TARGET_BOARD_PLATFORM)
+
+    unset BOARD_HS_DYNAMIC_AFBC_TARGET
+    export BOARD_HS_DYNAMIC_AFBC_TARGET=$(get_build_var BOARD_HS_DYNAMIC_AFBC_TARGET)
+
+    unset TARGET_RK_GRALLOC_VERSION
+    export TARGET_RK_GRALLOC_VERSION=$(get_build_var TARGET_RK_GRALLOC_VERSION)
+
+    unset TARGET_BOARD_PLATFORM_EBOOK
+    export TARGET_BOARD_PLATFORM_EBOOK=$(get_build_var BUILD_WITH_RK_EBOOK)
+
     # needed for building linux on MacOS
     # TODO: fix the path
     #export HOST_EXTRACFLAGS="-I "$T/system/kernel_headers/host_include

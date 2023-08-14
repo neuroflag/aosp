@@ -166,6 +166,7 @@ extern "C" {
 #define DRM_MODE_PROP_IMMUTABLE (1<<2)
 #define DRM_MODE_PROP_ENUM      (1<<3) /* enumerated type with text strings */
 #define DRM_MODE_PROP_BLOB      (1<<4)
+#define DRM_MODE_PROP_BITMASK	(1<<5) /* bitmask of enumerated types */
 
 #define DRM_MODE_CURSOR_BO      (1<<0)
 #define DRM_MODE_CURSOR_MOVE    (1<<1)
@@ -379,6 +380,11 @@ int drmModeAddFB2WithModifiers(int fd, uint32_t width, uint32_t height,
 			       const uint32_t pitches[4], const uint32_t offsets[4],
 			       const uint64_t modifier[4], uint32_t *buf_id,
 				   uint32_t flags);
+
+extern int drmModeAddFB2_ext(int fd, uint32_t width, uint32_t height,
+                        uint32_t pixel_format, uint32_t bo_handles[4],
+                        uint32_t pitches[4], uint32_t offsets[4], __u64 modifier[4],
+                        uint32_t *buf_id, uint32_t flags);
 
 /**
  * Destroies the given framebuffer.

@@ -51,6 +51,17 @@
 #include "ProgramCache.h"
 #include "filters/BlurFilter.h"
 
+#include "graphicpolicy.h"
+
+#if RK_NV12_10_TO_NV12_BY_RGA
+#define UN_NEED_GL
+#include <include/RockchipRga.h>
+#endif
+
+#if (RK_NV12_10_TO_NV12_BY_NENO | RK_HDR)
+#include <dlfcn.h>
+#endif
+
 extern "C" EGLAPI const char* eglQueryStringImplementationANDROID(EGLDisplay dpy, EGLint name);
 
 bool checkGlError(const char* op, int lineNumber) {
@@ -113,6 +124,19 @@ void writePPM(const char* basename, GLuint width, GLuint height) {
 }
 
 namespace android {
+
+#if (RK_NV12_10_TO_NV12_BY_RGA | RK_NV12_10_TO_NV12_BY_NENO | RK_HDR)
+    typedef struct
+    {
+         sp<GraphicBuffer> yuvTexBuffer;
+         EGLImageKHR img;
+    } TexBufferImag;
+
+#define TexBufferMax  2
+#define TexKey 0x524f434b
+    static TexBufferImag yuvTeximg[TexBufferMax] = {{NULL,EGL_NO_IMAGE_KHR},{NULL,EGL_NO_IMAGE_KHR}};
+#endif
+
 namespace renderengine {
 namespace gl {
 
@@ -333,6 +357,40 @@ EGLConfig GLESRenderEngine::chooseEglConfig(EGLDisplay display, int format, bool
     return config;
 }
 
+static int mirror_display_id = 0;
+static int need_mirror_X = 0;
+static int need_mirror_Y = 0;
+
+#define PROP_SF_MIRROR_DISPLAYID "persist.sf.mirror.displayid"
+#define PROP_SF_MIRROR_X "persist.sf.mirror.x"
+#define PROP_SF_MIRROR_Y "persist.sf.mirror.y"
+
+mat4 mirrorX = {-1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
+mat4 mirrorY = {1,0,0,0, 0,-1,0,0, 0,0,1,0, 0,0,0,1};
+
+void sf_mirror(int display_id,Description * pmState)
+{
+    if(graphic_policy(GPID_SF_MIRROR)) {
+
+        if(display_id == mirror_display_id && need_mirror_X){
+            pmState->projectionMatrix = mirrorX * pmState->projectionMatrix ;
+        }
+        if(display_id == mirror_display_id && need_mirror_Y){
+            pmState->projectionMatrix = mirrorY * pmState->projectionMatrix ;
+        }
+    }
+
+    //debug sf-mirror
+    //ALOGD("sf-mirror display_id:%d --------\n",display_id);
+    //const float * ppm =  pmState->projectionMatrix.asArray();
+    //for(int i = 0 ; i < 4; i++)
+    //{
+    //   ALOGD("sf-mirror ppm = %f %f %f %f\n",*ppm,*(ppm+1),*(ppm+2),*(ppm+3));
+    //   ppm += 4;
+    //}
+
+}
+
 GLESRenderEngine::GLESRenderEngine(const RenderEngineCreationArgs& args, EGLDisplay display,
                                    EGLConfig config, EGLContext ctxt, EGLSurface dummy,
                                    EGLContext protectedContext, EGLSurface protectedDummy)
@@ -352,6 +410,17 @@ GLESRenderEngine::GLESRenderEngine(const RenderEngineCreationArgs& args, EGLDisp
 
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
+
+    //rk-ext sf gpu-compose mirror init
+    char propMirrorBuf[PROPERTY_VALUE_MAX];
+    property_get(PROP_SF_MIRROR_DISPLAYID, propMirrorBuf, "0");
+    mirror_display_id = atoi(propMirrorBuf);
+    property_get(PROP_SF_MIRROR_X, propMirrorBuf, "0");
+    need_mirror_X = atoi(propMirrorBuf);
+    property_get(PROP_SF_MIRROR_Y, propMirrorBuf, "0");
+    need_mirror_Y = atoi(propMirrorBuf);
+    ALOGI("sf-mirror config displayid:%d x:%d y:%d\n",mirror_display_id,need_mirror_X,need_mirror_Y);
+
 
     // Initialize protected EGL Context.
     if (mProtectedEGLContext != EGL_NO_CONTEXT) {
@@ -1026,6 +1095,103 @@ EGLImageKHR GLESRenderEngine::createFramebufferImageIfNeeded(ANativeWindowBuffer
     return image;
 }
 
+#if (RK_NV12_10_TO_NV12_BY_RGA | RK_NV12_10_TO_NV12_BY_NENO | RK_HDR)
+  /* print time macros. */
+#define PRINT_TIME_START        \
+    struct timeval tpend1, tpend2;\
+    long usec1 = 0;\
+    gettimeofday(&tpend1,NULL);\
+
+#define PRINT_TIME_END(tag)        \
+    gettimeofday(&tpend2,NULL);\
+    usec1 = 1000*(tpend2.tv_sec - tpend1.tv_sec) + (tpend2.tv_usec- tpend1.tv_usec)/1000;\
+    if (property_get_bool("sys.hwc.time", 1)) \
+    ALOGD_IF(1,"%s use time=%ld ms",tag,usec1);\
+
+#if RK_NV12_10_TO_NV12_BY_RGA
+static int rgaCopyBit(sp<GraphicBuffer> src_buf, sp<GraphicBuffer> dst_buf, const Rect& rect)
+{
+    rga_info_t src, dst;
+    int src_l,src_t,src_r,src_b,src_h,src_stride,src_format;
+    int dst_l,dst_t,dst_r,dst_b,dst_h,dst_stride,dst_format;
+    RockchipRga& mRga = RockchipRga::get();
+    int ret = 0;
+
+    memset(&src, 0, sizeof(rga_info_t));
+    memset(&dst, 0, sizeof(rga_info_t));
+    src.fd = -1;
+    dst.fd = -1;
+
+    src_stride = src_buf->getStride();
+    src_format = src_buf->getPixelFormat();
+    src_h = src_buf->getHeight();
+
+    dst_stride = dst_buf->getStride();
+    dst_format = dst_buf->getPixelFormat();
+    dst_h = dst_buf->getHeight();
+
+    dst_l = src_l = rect.left;
+    dst_t = src_t = rect.top;
+    dst_r = src_r = rect.right;
+    dst_b = src_b = rect.bottom;
+    rga_set_rect(&src.rect, src_l, src_t, src_r - src_l, src_b - src_t, src_stride, src_h, src_format);
+    rga_set_rect(&dst.rect, dst_l, dst_t, dst_buf->getWidth(), dst_buf->getHeight(), dst_stride, dst_h, dst_format);
+
+    src.hnd = src_buf->handle;
+    dst.hnd = dst_buf->handle;
+//    mRga.RkRgaGetBufferFd(src_buf->handle, &src.fd);
+//    mRga.RkRgaGetBufferFd(dst_buf->handle, &dst.fd);
+//  src.rotation = rga_transform;
+//PRINT_TIME_START
+
+    ret = mRga.RkRgaBlit(&src, &dst, NULL);
+//PRINT_TIME_END("rgaCopyBit")
+    if(ret) {
+        ALOGD_IF(1,"rgaCopyBit  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+            src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+            dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+        ALOGD_IF(1,"rgaCopyBit : src hnd=%p,dst hnd=%p, src_format=0x%x ==> dst_format=0x%x\n",
+            (void*)src_buf->handle, (void*)(dst_buf->handle), src_format, dst_format);
+        return ret;
+    }
+
+    return ret;
+}
+#endif
+
+#if RK_HDR
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef signed char s8;
+typedef signed short s16;
+typedef signed int s32;
+#define ARM_P010            0x4000000
+#define HDRUSAGE            0x3000000
+#define RK_XXX_PATH         "/system/lib64/librockchipxxx.so"
+typedef void (*__rockchipxxx)(u8 *src, u8 *dst, int w, int h, int srcStride, int dstStride, int area);
+
+static void* dso = NULL;
+static __rockchipxxx rockchipxxx = NULL;
+
+#define ALIGN(val, align) (((val) + ((align) - 1)) & ~((align) - 1))
+
+#elif RK_NV12_10_TO_NV12_BY_NENO
+
+typedef unsigned char u8;
+typedef unsigned short u16;
+typedef unsigned int u32;
+typedef signed char s8;
+typedef signed short s16;
+typedef signed int s32;
+#define RK_XXX_PATH         "/system/lib/librockchipxxx.so"
+typedef void (*__rockchipxxx3288)(u8 *src, u8 *dst, int w, int h, int srcStride, int dstStride, int area);
+
+static void* dso = NULL;
+static __rockchipxxx3288 rockchipxxx3288 = NULL;
+#endif
+
+#endif
 status_t GLESRenderEngine::drawLayers(const DisplaySettings& display,
                                       const std::vector<const LayerSettings*>& layers,
                                       ANativeWindowBuffer* const buffer,
@@ -1038,9 +1204,12 @@ status_t GLESRenderEngine::drawLayers(const DisplaySettings& display,
     }
 
     if (bufferFence.get() >= 0) {
+#if !MALI_PRODUCT_ID_450 && !MALI_PRODUCT_ID_400
         // Duplicate the fence for passing to waitFence.
         base::unique_fd bufferFenceDup(dup(bufferFence.get()));
-        if (bufferFenceDup < 0 || !waitFence(std::move(bufferFenceDup))) {
+        if (bufferFenceDup < 0 || !waitFence(std::move(bufferFenceDup)))
+#endif
+        {
             ATRACE_NAME("Waiting before draw");
             sync_wait(bufferFence.get(), -1);
         }
@@ -1151,6 +1320,7 @@ status_t GLESRenderEngine::drawLayers(const DisplaySettings& display,
         mState.maxMasteringLuminance = layer->source.buffer.maxMasteringLuminance;
         mState.maxContentLuminance = layer->source.buffer.maxContentLuminance;
         mState.projectionMatrix = projectionMatrix * layer->geometry.positionTransform;
+        sf_mirror(display.display_id, &mState);
 
         const FloatRect bounds = layer->geometry.boundaries;
         Mesh::VertexArray<vec2> position(mesh.getPositionArray<vec2>());
@@ -1170,12 +1340,125 @@ status_t GLESRenderEngine::drawLayers(const DisplaySettings& display,
             isOpaque = layer->source.buffer.isOpaque;
 
             sp<GraphicBuffer> gBuf = layer->source.buffer.buffer;
-            bindExternalTextureBuffer(layer->source.buffer.textureName, gBuf,
-                                      layer->source.buffer.fence);
+#if (RK_NV12_10_TO_NV12_BY_RGA | RK_NV12_10_TO_NV12_BY_NENO | RK_HDR)
+            if(gBuf != NULL &&
+               gBuf->getPixelFormat() == HAL_PIXEL_FORMAT_YCrCb_NV12_10 )
+            {
+                //Rect CurrentCrop(0,0,3840,2160);
+                Rect CurrentCrop(layer->source.buffer.currentcrop);
+#if RK_HDR
+                const int yuvTexUsage = GraphicBuffer::USAGE_HW_TEXTURE;
+                const int yuvTexFormat = HAL_PIXEL_FORMAT_YCBCR_P010;
+                const int dstPixelByte = 2;
+#elif (RK_NV12_10_TO_NV12_BY_NENO | RK_NV12_10_TO_NV12_BY_RGA)
+                const int yuvTexUsage = GraphicBuffer::USAGE_HW_TEXTURE /*| HDRUSAGE*/;
+                //GraphicBuffer::USAGE_SW_WRITE_RARELY;
+                const int yuvTexFormat = HAL_PIXEL_FORMAT_YCrCb_NV12;
+#endif
+                static int yuvcnt;
+                int yuvIndex ;
+
+                yuvcnt ++;
+                yuvIndex = yuvcnt%2;
+#if (RK_HDR | RK_NV12_10_TO_NV12_BY_NENO)
+                int src_l,src_t,src_r,src_b,src_stride;
+                void *src_vaddr;
+                void *dst_vaddr;
+                src_l = CurrentCrop.left;
+                src_t = CurrentCrop.top;
+                src_r = CurrentCrop.right;
+                src_b = CurrentCrop.bottom;
+                uint32_t w = src_r - src_l;
+                src_stride = w*1.25+64;
+#elif RK_NV12_10_TO_NV12_BY_RGA
+                //Since rga cann't support scalet to bigger than 4096 limit to 4096
+                uint32_t w = (CurrentCrop.getWidth() + 31) & (~31);
+                //ALOGD("rga10to8[%s %d] f:%x w:%d gH:%d\n",__FUNCTION__,__LINE__,gBuf->getPixelFormat(),w,gBuf->getHeight());
+#endif
+                if((yuvTeximg[yuvIndex].yuvTexBuffer != NULL) &&
+                   (yuvTeximg[yuvIndex].yuvTexBuffer->getWidth() != w ||
+                    yuvTeximg[yuvIndex].yuvTexBuffer->getHeight() != gBuf->getHeight()))
+                {
+                    yuvTeximg[yuvIndex].yuvTexBuffer = NULL;
+                }
+                if(yuvTeximg[yuvIndex].yuvTexBuffer == NULL)
+                {
+                    ALOGD("sf new GraphicBuffer w:%d h:%d f:0x%x u:0x%x\n",w, gBuf->getHeight(),yuvTexFormat, yuvTexUsage);
+                    yuvTeximg[yuvIndex].yuvTexBuffer = new GraphicBuffer(w, gBuf->getHeight(),yuvTexFormat, yuvTexUsage);
+                }
+
+#if (RK_HDR | RK_NV12_10_TO_NV12_BY_NENO)
+                gBuf->lock(GRALLOC_USAGE_SW_READ_OFTEN,&src_vaddr);
+                yuvTeximg[yuvIndex].yuvTexBuffer->lock(GRALLOC_USAGE_SW_WRITE_OFTEN|GRALLOC_USAGE_SW_READ_OFTEN,&dst_vaddr);
+
+                //PRINT_TIME_START
+                if(dso == NULL)
+                    dso = dlopen(RK_XXX_PATH, RTLD_NOW | RTLD_LOCAL);
+
+                if (dso == 0) {
+                    ALOGE("rk_debug can't not find %s ! error=%s \n",RK_XXX_PATH,dlerror());
+                    return BAD_VALUE;
+                }
+#if RK_HDR
+                if(rockchipxxx == NULL)
+                    rockchipxxx = (__rockchipxxx)dlsym(dso, "_Z11rockchipxxxPhS_iiiii");
+                if(rockchipxxx == NULL)
+                {
+                    ALOGE("rk_debug can't not find target function in %s ! \n",RK_XXX_PATH);
+                    dlclose(dso);
+                    return BAD_VALUE;
+                }
+                /* align w to 64 */
+                w = ALIGN(w, 64);
+                ALOGD("DEBUG_lb Stride=%d w=%d  src_stride:%d \n",yuvTeximg[yuvIndex].yuvTexBuffer->getStride(), w, gBuf->getStride());
+                if(w <= w*dstPixelByte/2)
+                {
+                    rockchipxxx((u8*)src_vaddr, (u8*)dst_vaddr, w, yuvTeximg[yuvIndex].yuvTexBuffer->getHeight(), src_stride, w*dstPixelByte, 0);
+                }else
+                    ALOGE("%s(%d):unsupport resolution for 4k", __FUNCTION__, __LINE__);
+#elif RK_NV12_10_TO_NV12_BY_NENO
+                if(rockchipxxx3288 == NULL)
+                    rockchipxxx3288 = (__rockchipxxx3288)dlsym(dso, "_Z15rockchipxxx3288PhS_iiiii");
+                if(rockchipxxx3288 == NULL)
+                {
+                    ALOGE("rk_debug can't not find target function in %s ! \n",RK_XXX_PATH);
+                    dlclose(dso);
+                    return BAD_VALUE;
+                }
+                rockchipxxx3288((u8*)src_vaddr, (u8*)dst_vaddr, w, yuvTeximg[yuvIndex].yuvTexBuffer->getHeight(), src_stride, w, 0);
+#endif
+                //PRINT_TIME_END("convert10to16_highbit_arm64_neon")
+                ALOGD("src_vaddr=%p,dst_vaddr=%p,crop_w=%d,crop_h=%d,stride=%f, src_stride=%d,raw_w=%d,raw_h=%d",
+                        src_vaddr, dst_vaddr, src_r - src_l,src_b - src_t,
+                        (src_r - src_l)*1.25+64,src_stride,gBuf->getWidth(),gBuf->getHeight());
+
+#elif RK_NV12_10_TO_NV12_BY_RGA
+                rgaCopyBit(gBuf, yuvTeximg[yuvIndex].yuvTexBuffer, CurrentCrop);
+#endif
+            gBuf->unlock();
+            yuvTeximg[yuvIndex].yuvTexBuffer->unlock();
+            bindExternalTextureBuffer(layer->source.buffer.textureName,
+                            yuvTeximg[yuvIndex].yuvTexBuffer, layer->source.buffer.fence);
+
+        }
+        else
+#endif
+        {
+            bindExternalTextureBuffer(layer->source.buffer.textureName, gBuf, layer->source.buffer.fence);
+        }
 
             usePremultipliedAlpha = layer->source.buffer.usePremultipliedAlpha;
             Texture texture(Texture::TEXTURE_EXTERNAL, layer->source.buffer.textureName);
-            mat4 texMatrix = layer->source.buffer.textureTransform;
+            mat4 texMatrix;
+            texMatrix = layer->source.buffer.textureTransform;
+
+#if (RK_NV12_10_TO_NV12_BY_RGA | RK_NV12_10_TO_NV12_BY_NENO | RK_HDR)
+            if(gBuf != NULL && gBuf->getPixelFormat() == HAL_PIXEL_FORMAT_YCrCb_NV12_10 )
+            {
+                mat4 unit;
+                texMatrix = unit;
+            }
+#endif
 
             texture.setMatrix(texMatrix.asArray());
             texture.setFiltering(layer->source.buffer.useTextureFiltering);

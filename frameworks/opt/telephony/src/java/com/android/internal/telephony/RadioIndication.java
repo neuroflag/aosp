@@ -710,7 +710,7 @@ public class RadioIndication extends IRadioIndication.Stub {
         if (RIL.RILJ_LOGD) mRil.unsljLog(RIL_UNSOL_RIL_CONNECTED);
 
         // Initial conditions
-        mRil.setRadioPower(false, null);
+        mRil.setRadioPower(true, null);
         mRil.setCdmaSubscriptionSource(mRil.mCdmaSubscription, null);
         // todo: this should not require a version number now. Setting it to latest RIL version for
         // now.

@@ -21,6 +21,7 @@
 #include "CursorButtonAccumulator.h"
 #include "CursorScrollAccumulator.h"
 #include "TouchCursorInputMapperCommon.h"
+#include <cutils/properties.h>
 
 namespace android {
 
@@ -240,6 +241,7 @@ void CursorInputMapper::dumpParameters(std::string& dump) {
 void CursorInputMapper::reset(nsecs_t when) {
     mButtonState = 0;
     mDownTime = 0;
+    mDisplayId=0;
 
     mPointerVelocityControl.reset();
     mWheelXVelocityControl.reset();
@@ -314,7 +316,7 @@ void CursorInputMapper::sync(nsecs_t when) {
     int32_t displayId;
     float xCursorPosition = AMOTION_EVENT_INVALID_CURSOR_POSITION;
     float yCursorPosition = AMOTION_EVENT_INVALID_CURSOR_POSITION;
-    if (mSource == AINPUT_SOURCE_MOUSE) {
+    if (mPointerController != NULL) {
         if (moved || scrolled || buttonsChanged) {
             mPointerController->setPresentation(PointerControllerInterface::PRESENTATION_POINTER);
 
@@ -334,7 +336,20 @@ void CursorInputMapper::sync(nsecs_t when) {
         pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_Y, yCursorPosition);
         pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_RELATIVE_X, deltaX);
         pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_RELATIVE_Y, deltaY);
-        displayId = mPointerController->getDisplayId();
+        char mMousePresentation[PROPERTY_VALUE_MAX] = {0};
+        property_get("sys.mouse.presentation", mMousePresentation, "0");
+        if (strcmp(mMousePresentation, "1") == 0) {
+           displayId = mDisplayId;
+           float minX, minY, maxX, maxY;
+           if (mPointerController->getBounds(&minX, &minY, &maxX, &maxY)) {
+               if(xCursorPosition==minX||xCursorPosition==maxX||yCursorPosition==minY||yCursorPosition==maxY){
+                   displayId=getPolicy()->notifyDisplayIdChanged();
+                   mDisplayId=displayId;
+               }
+           }
+        }else{
+           displayId = mPointerController->getDisplayId();
+        }
     } else {
         pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_X, deltaX);
         pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_Y, deltaY);
@@ -356,6 +371,7 @@ void CursorInputMapper::sync(nsecs_t when) {
     synthesizeButtonKeys(getContext(), AKEY_EVENT_ACTION_DOWN, when, getDeviceId(), mSource,
                          displayId, policyFlags, lastButtonState, currentButtonState);
 
+    bool release = false;
     // Send motion event.
     if (downChanged || moved || scrolled || buttonsChanged) {
         int32_t metaState = getContext()->getGlobalMetaState();
@@ -363,10 +379,29 @@ void CursorInputMapper::sync(nsecs_t when) {
         int32_t motionEventAction;
         if (downChanged) {
             motionEventAction = down ? AMOTION_EVENT_ACTION_DOWN : AMOTION_EVENT_ACTION_UP;
-        } else if (down || (mSource != AINPUT_SOURCE_MOUSE)) {
+        } else if (down || mPointerController == NULL) {
             motionEventAction = AMOTION_EVENT_ACTION_MOVE;
         } else {
             motionEventAction = AMOTION_EVENT_ACTION_HOVER_MOVE;
+        }
+
+        //mouse convert to touch
+        if(motionEventAction == AMOTION_EVENT_ACTION_DOWN) {
+            isMouseToTouch = true;
+            ALOGD("CursorInputMapper::sync motionEventAction==DOWN or UP");
+            mSource = AINPUT_SOURCE_TOUCHSCREEN;//主要起作用的
+        }
+        if(isMouseToTouch) {
+            pointerProperties.toolType = AMOTION_EVENT_TOOL_TYPE_FINGER;
+            pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_SIZE, 0.152941);
+            pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_PRESSURE, 0);
+            pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_TOUCH_MAJOR, 38.971809);
+            pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_TOUCH_MINOR, 38.971809);
+            pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_TOOL_MAJOR, 38.971809);
+            pointerCoords.setAxisValue(AMOTION_EVENT_AXIS_TOOL_MINOR, 38.971809);
+        }
+        if(motionEventAction == AMOTION_EVENT_ACTION_UP) {
+            release = true;
         }
 
         if (buttonsReleased) {
@@ -374,7 +409,18 @@ void CursorInputMapper::sync(nsecs_t when) {
             while (!released.isEmpty()) {
                 int32_t actionButton = BitSet32::valueForBit(released.clearFirstMarkedBit());
                 buttonState &= ~actionButton;
-                NotifyMotionArgs releaseArgs(getContext()->getNextId(), when, getDeviceId(),
+                if(isMouseToTouch) {
+                    NotifyMotionArgs releaseArgs(getContext()->getNextId(), when, getDeviceId(),
+                        mSource, displayId, policyFlags,
+                        AMOTION_EVENT_ACTION_UP, actionButton, 0,
+                        metaState, buttonState,MotionClassification::NONE, 
+                        AMOTION_EVENT_EDGE_FLAG_NONE,1, &pointerProperties, 
+                        &pointerCoords,mXPrecision, mYPrecision, 
+                        xCursorPosition, yCursorPosition, downTime, 
+                        /* videoFrames */ {});
+                    getListener()->notifyMotion(&releaseArgs);
+                } else {
+                    NotifyMotionArgs releaseArgs(getContext()->getNextId(), when, getDeviceId(),
                                              mSource, displayId, policyFlags,
                                              AMOTION_EVENT_ACTION_BUTTON_RELEASE, actionButton, 0,
                                              metaState, buttonState, MotionClassification::NONE,
@@ -382,39 +428,52 @@ void CursorInputMapper::sync(nsecs_t when) {
                                              &pointerCoords, mXPrecision, mYPrecision,
                                              xCursorPosition, yCursorPosition, downTime,
                                              /* videoFrames */ {});
-                getListener()->notifyMotion(&releaseArgs);
+                    getListener()->notifyMotion(&releaseArgs);
+                }
             }
         }
 
-        NotifyMotionArgs args(getContext()->getNextId(), when, getDeviceId(), mSource, displayId,
+        if(motionEventAction != AMOTION_EVENT_ACTION_DOWN){
+            NotifyMotionArgs args(getContext()->getNextId(), when, getDeviceId(), mSource, displayId,
                               policyFlags, motionEventAction, 0, 0, metaState, currentButtonState,
                               MotionClassification::NONE, AMOTION_EVENT_EDGE_FLAG_NONE, 1,
                               &pointerProperties, &pointerCoords, mXPrecision, mYPrecision,
                               xCursorPosition, yCursorPosition, downTime,
                               /* videoFrames */ {});
-        getListener()->notifyMotion(&args);
+            getListener()->notifyMotion(&args);
+        }
 
         if (buttonsPressed) {
             BitSet32 pressed(buttonsPressed);
             while (!pressed.isEmpty()) {
                 int32_t actionButton = BitSet32::valueForBit(pressed.clearFirstMarkedBit());
                 buttonState |= actionButton;
-                NotifyMotionArgs pressArgs(getContext()->getNextId(), when, getDeviceId(), mSource,
-                                           displayId, policyFlags,
+                if(isMouseToTouch) {
+                    NotifyMotionArgs pressArgs(getContext()->getNextId(), when, getDeviceId(),
+                        mSource, displayId, policyFlags, AMOTION_EVENT_ACTION_DOWN,
+                        actionButton, 0, metaState, buttonState,
+                        MotionClassification::NONE, AMOTION_EVENT_EDGE_FLAG_NONE,
+                        1, &pointerProperties, &pointerCoords,
+                        mXPrecision, mYPrecision, xCursorPosition, yCursorPosition,downTime, /* videoFrames */ {});
+                    getListener()->notifyMotion(&pressArgs);
+                } else {
+                    NotifyMotionArgs pressArgs(getContext()->getNextId(), when, getDeviceId(),
+                                           mSource,displayId, policyFlags,
                                            AMOTION_EVENT_ACTION_BUTTON_PRESS, actionButton, 0,
                                            metaState, buttonState, MotionClassification::NONE,
                                            AMOTION_EVENT_EDGE_FLAG_NONE, 1, &pointerProperties,
                                            &pointerCoords, mXPrecision, mYPrecision,
                                            xCursorPosition, yCursorPosition, downTime,
                                            /* videoFrames */ {});
-                getListener()->notifyMotion(&pressArgs);
+                    getListener()->notifyMotion(&pressArgs);
+                }
             }
         }
 
         ALOG_ASSERT(buttonState == currentButtonState);
 
         // Send hover move after UP to tell the application that the mouse is hovering now.
-        if (motionEventAction == AMOTION_EVENT_ACTION_UP && (mSource == AINPUT_SOURCE_MOUSE)) {
+        if (motionEventAction == AMOTION_EVENT_ACTION_UP && (mPointerController != NULL)) {
             NotifyMotionArgs hoverArgs(getContext()->getNextId(), when, getDeviceId(), mSource,
                                        displayId, policyFlags, AMOTION_EVENT_ACTION_HOVER_MOVE, 0,
                                        0, metaState, currentButtonState, MotionClassification::NONE,
@@ -445,6 +504,11 @@ void CursorInputMapper::sync(nsecs_t when) {
 
     mCursorMotionAccumulator.finishSync();
     mCursorScrollAccumulator.finishSync();
+
+    if(release) {
+           mSource = AINPUT_SOURCE_MOUSE;
+           isMouseToTouch = false;
+    }
 }
 
 int32_t CursorInputMapper::getScanCodeState(uint32_t sourceMask, int32_t scanCode) {

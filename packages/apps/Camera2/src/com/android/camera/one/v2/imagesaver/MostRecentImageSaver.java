@@ -16,6 +16,8 @@
 
 package com.android.camera.one.v2.imagesaver;
 
+import com.android.camera.debug.Log;
+import com.android.camera.debug.Log.Tag;
 import com.android.camera.one.v2.camera2proxy.ImageProxy;
 import com.android.camera.one.v2.camera2proxy.TotalCaptureResultProxy;
 import com.google.common.base.Optional;
@@ -75,7 +77,8 @@ public class MostRecentImageSaver implements ImageSaver {
                 // not close it.
                 mThumbnails.remove(thumbnail.getTimestamp());
             }
-
+            
+            Log.d(new Tag("MostRecentImageSaver"), "MostRecentImageSaver saveAndCloseImage");
             mSingleImageSaver.saveAndCloseImage(fullSize, Optional.fromNullable(thumbnail),
                     fullSize.getMetadata());
         } finally {

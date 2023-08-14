@@ -756,8 +756,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 "updatePermissionFlags");
 
         if ((flagMask & FLAG_PERMISSION_POLICY_FIXED) != 0 && !overridePolicy) {
-            throw new SecurityException("updatePermissionFlags requires "
-                    + Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY);
+        //    throw new SecurityException("updatePermissionFlags requires "
+        //            + Manifest.permission.ADJUST_RUNTIME_PERMISSIONS_POLICY);
         }
 
         // Only the system can change these flags and nothing else.

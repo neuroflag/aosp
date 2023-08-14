@@ -51,6 +51,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+
+import com.android.settings.localepicker.LocaleDragAndDropAdapter.OnItemClickListener;
+import android.util.Log;
+import android.os.Handler;
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
+
 /**
  * Drag-and-drop editor for the user-ordered locale lists.
  */
@@ -88,7 +94,17 @@ public class LocaleListEditor extends RestrictedSettingsFragment {
 
         LocaleStore.fillCache(this.getContext());
         final List<LocaleStore.LocaleInfo> feedsList = getUserLocaleList();
-        mAdapter = new LocaleDragAndDropAdapter(this.getContext(), feedsList);
+        mAdapter = new LocaleDragAndDropAdapter(this.getContext(), feedsList);    
+        mAdapter.setOnItemClickListener(new OnItemClickListener(){
+            @Override    
+            public void onItemClick(View view , int position){
+                if(position != 0)
+                {
+                    mAdapter.onItemMove(position, 0);
+                    mAdapter.doTheUpdate();
+                }
+            }
+        });
     }
 
     @Override
@@ -309,6 +325,31 @@ public class LocaleListEditor extends RestrictedSettingsFragment {
                 startActivityForResult(intent, REQUEST_LOCALE_PICKER);
             }
         });
+
+        if(list != null)
+        {
+            list.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Handler mHandler = new Handler();
+                        mHandler.postDelayed(new Runnable() {
+                                     @Override
+                                     public void run() {
+                                       for(int i = 0; i < list.getChildCount() ; i ++){
+                                            ViewHolder mTmpHolder = list.findViewHolderForPosition(i);
+                                            if(mTmpHolder != null && mTmpHolder.itemView != null )
+                                            {
+                                                    if(mTmpHolder.itemView.isFocusable()){
+                                                        mTmpHolder.itemView.requestFocus();
+                                                        break;
+                                                    }
+                                            }
+                                        }
+                                    }
+                         }, 200);
+
+            }});
+        }
     }
 
     // Hide the "Remove" menu if there is only one locale in the list, show it otherwise

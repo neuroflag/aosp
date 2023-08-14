@@ -22,6 +22,7 @@ import static com.android.providers.media.util.Logging.TAG;
 
 import android.content.ContentProviderClient;
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
@@ -35,6 +36,7 @@ import android.mtp.MtpConstants;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.provider.MediaStore;
@@ -58,6 +60,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.android.providers.media.playlist.Playlist;
 import com.android.providers.media.util.BackgroundThread;
 import com.android.providers.media.util.DatabaseUtils;
 import com.android.providers.media.util.FileUtils;
@@ -65,13 +68,17 @@ import com.android.providers.media.util.ForegroundThread;
 import com.android.providers.media.util.Logging;
 import com.android.providers.media.util.MimeUtils;
 
+import com.google.common.collect.Iterables;
+
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -96,6 +103,8 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
      */
     public static final String CURRENT_GENERATION_CLAUSE = "SELECT generation FROM local_metadata";
 
+    private static final int NOTIFY_BATCH_SIZE = 256;
+
     final Context mContext;
     final String mName;
     final int mVersion;
@@ -109,15 +118,9 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
     final @Nullable OnLegacyMigrationListener mMigrationListener;
     final @Nullable UnaryOperator<String> mIdGenerator;
     final Set<String> mFilterVolumeNames = new ArraySet<>();
+    private final String mMigrationFileName;
     long mScanStartTime;
     long mScanStopTime;
-
-    /**
-     * Flag indicating that this database should invoke
-     * {@link #migrateFromLegacy} to migrate from a legacy database, typically
-     * only set when this database is starting from scratch.
-     */
-    boolean mMigrateFromLegacy;
 
     /**
      * Lock used to guard against deadlocks in SQLite; the write lock is used to
@@ -131,6 +134,8 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
      * database connections, which then deadlocks.
      */
     private final ReentrantReadWriteLock mSchemaLock = new ReentrantReadWriteLock();
+
+    private static Object sMigrationLock = new Object();
 
     public interface OnSchemaChangeListener {
         public void onSchemaChange(@NonNull String volumeName, int versionFrom, int versionTo,
@@ -186,6 +191,7 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
         mFilesListener = filesListener;
         mMigrationListener = migrationListener;
         mIdGenerator = idGenerator;
+        mMigrationFileName = "." + mVolumeName;
 
         // Configure default filters until we hear differently
         if (mInternal) {
@@ -364,9 +370,14 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
     @Override
     public void onOpen(final SQLiteDatabase db) {
         Log.v(TAG, "onOpen() for " + mName);
-        if (mMigrateFromLegacy) {
-            // Clear flag, since we should only attempt once
-            mMigrateFromLegacy = false;
+        final File migration = new File(mContext.getFilesDir(), mMigrationFileName);
+        // Another thread entering migration block will be blocked until the
+        // migration is complete from current thread.
+        synchronized (sMigrationLock) {
+            if (!migration.exists()) {
+                Log.v(TAG, "onOpen() finished for " + mName);
+                return;
+            }
 
             mSchemaLock.writeLock().lock();
             try {
@@ -376,9 +387,11 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
                 createLatestIndexes(db, mInternal);
             } finally {
                 mSchemaLock.writeLock().unlock();
+                // Clear flag, since we should only attempt once
+                migration.delete();
+                Log.v(TAG, "onOpen() finished for " + mName);
             }
         }
-        Log.v(TAG, "onOpen() finished for " + mName);
     }
 
     @GuardedBy("mProjectionMapCache")
@@ -520,7 +533,6 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
             for (int i = 0; i < state.blockingTasks.size(); i++) {
                 state.blockingTasks.get(i).run();
             }
-
             // We carefully "phase" our two sets of work here to ensure that we
             // completely finish dispatching all change notifications before we
             // process background tasks, to ensure that the background work
@@ -635,7 +647,9 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
     private void notifyChangeInternal(@NonNull Collection<Uri> uris, int flags) {
         Trace.beginSection("notifyChange");
         try {
-            mContext.getContentResolver().notifyChange(uris, null, flags);
+            for (List<Uri> partition : Iterables.partition(uris, NOTIFY_BATCH_SIZE)) {
+                mContext.getContentResolver().notifyChange(partition, null, flags);
+            }
         } finally {
             Trace.endSection();
         }
@@ -807,7 +821,11 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
         // Since this code is used by both the legacy and modern providers, we
         // only want to migrate when we're running as the modern provider
         if (!mLegacyProvider) {
-            mMigrateFromLegacy = true;
+            try {
+                new File(mContext.getFilesDir(), mMigrationFileName).createNewFile();
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to create a migration file: ." + mVolumeName, e);
+            }
         }
     }
 
@@ -854,9 +872,41 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
                         DatabaseUtils.copyFromCursorToContentValues(column, c, values);
                     }
 
+                    final String volumePath = FileUtils.extractVolumePath(data);
+
+                    // Handle playlist files which may need special handling if
+                    // there are no "real" playlist files.
+                    final int mediaType = c.getInt(c.getColumnIndex(FileColumns.MEDIA_TYPE));
+                    if (!mInternal && volumePath != null &&
+                            mediaType == FileColumns.MEDIA_TYPE_PLAYLIST) {
+                        File playlistFile = new File(data);
+
+                        if (!playlistFile.exists()) {
+                            if (LOGV) Log.v(TAG, "Migrating playlist file " + playlistFile);
+
+                            // Migrate virtual playlists to a "real" playlist file.
+                            // Also change playlist file name and path to adapt to new
+                            // default primary directory.
+                            String playlistFilePath = data;
+                            try {
+                                playlistFilePath = migratePlaylistFiles(client,
+                                        c.getLong(c.getColumnIndex(FileColumns._ID)));
+                                // Either migration didn't happen or is not necessary because
+                                // playlist file already exists
+                                if (playlistFilePath == null) playlistFilePath = data;
+                            } catch (Exception e) {
+                                // We only have one shot to migrate data, so log and
+                                // keep marching forward.
+                                Log.wtf(TAG, "Couldn't migrate playlist file " + data);
+                            }
+
+                            values.put(FileColumns.DATA, playlistFilePath);
+                            FileUtils.computeValuesFromData(values, /*isForFuse*/ false);
+                        }
+                    }
+
                     // When migrating pending or trashed files, we might need to
                     // rename them on disk to match new schema
-                    final String volumePath = FileUtils.extractVolumePath(data);
                     if (volumePath != null) {
                         FileUtils.computeDataFromValues(values, new File(volumePath),
                                 /*isForFuse*/ false);
@@ -907,6 +957,135 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
             db.endTransaction();
             mMigrationListener.onFinished(client, mVolumeName);
         }
+
+    }
+
+    @Nullable
+    private String migratePlaylistFiles(ContentProviderClient client, long playlistId)
+            throws IllegalStateException {
+        final String selection = FileColumns.MEDIA_TYPE + "=" + FileColumns.MEDIA_TYPE_PLAYLIST
+                + " AND " + FileColumns._ID + "=" + playlistId;
+        final String[] projection = new String[]{
+                FileColumns._ID,
+                FileColumns.DATA,
+                MediaColumns.MIME_TYPE,
+                MediaStore.Audio.PlaylistsColumns.NAME,
+        };
+        final Uri queryUri = MediaStore
+                .rewriteToLegacy(MediaStore.Files.getContentUri(mVolumeName));
+
+        try (Cursor cursor = client.query(queryUri, projection, selection, null, null)) {
+            if (!cursor.moveToFirst()) {
+                throw new IllegalStateException("Couldn't find database row for playlist file"
+                        + playlistId);
+            }
+
+            final String data = cursor.getString(cursor.getColumnIndex(MediaColumns.DATA));
+            File playlistFile = new File(data);
+            if (playlistFile.exists()) {
+                throw new IllegalStateException("Playlist file exists " + data);
+            }
+
+            String mimeType = cursor.getString(cursor.getColumnIndex(MediaColumns.MIME_TYPE));
+            // Sometimes, playlists in Q may have mimeType as
+            // "application/octet-stream". Ensure that playlist rows have the
+            // right playlist mimeType. These rows will be committed to a file
+            // and hence they should have correct playlist mimeType for
+            // Playlist#write to identify the right child playlist class.
+            if (!MimeUtils.isPlaylistMimeType(mimeType)) {
+                // Playlist files should always have right mimeType, default to
+                // audio/mpegurl when mimeType doesn't match playlist media_type.
+                mimeType = "audio/mpegurl";
+            }
+
+            // If the directory is Playlists/ change the directory to Music/
+            // since defaultPrimary for playlists is Music/. This helps
+            // resolve any future app-compat issues around renaming playlist
+            // files.
+            File parentFile = playlistFile.getParentFile();
+            if (parentFile.getName().equalsIgnoreCase("Playlists")) {
+                parentFile = new File(parentFile.getParentFile(), Environment.DIRECTORY_MUSIC);
+            }
+            final String playlistName = cursor.getString(
+                    cursor.getColumnIndex(MediaStore.Audio.PlaylistsColumns.NAME));
+
+            try {
+                // Build playlist file path with a file extension that matches
+                // playlist mimeType.
+                playlistFile = FileUtils.buildUniqueFile(parentFile, mimeType, playlistName);
+            } catch(FileNotFoundException e) {
+                Log.e(TAG, "Couldn't create unique file for " + playlistFile +
+                        ", using actual playlist file name", e);
+            }
+
+            final long rowId = cursor.getLong(cursor.getColumnIndex(FileColumns._ID));
+            final Uri playlistMemberUri = MediaStore.rewriteToLegacy(
+                    MediaStore.Audio.Playlists.Members.getContentUri(mVolumeName, rowId));
+            createPlaylistFile(client, playlistMemberUri, playlistFile);
+            return playlistFile.getAbsolutePath();
+        } catch (RemoteException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Creates "real" playlist files on disk from the playlist data from the database.
+     */
+    private void createPlaylistFile(ContentProviderClient client, @NonNull Uri playlistMemberUri,
+            @NonNull File playlistFile) throws IllegalStateException {
+        final String[] projection = new String[] {
+                MediaStore.Audio.Playlists.Members.AUDIO_ID,
+                MediaStore.Audio.Playlists.Members.PLAY_ORDER,
+        };
+
+        final Playlist playlist = new Playlist();
+        // Migrating music->playlist association.
+        try (Cursor c = client.query(playlistMemberUri, projection, null, null,
+                Audio.Playlists.Members.DEFAULT_SORT_ORDER)) {
+            while (c.moveToNext()) {
+                // Write these values to the playlist file
+                final long audioId = c.getLong(0);
+                final int playOrder = c.getInt(1);
+
+                final Uri audioFileUri = MediaStore.rewriteToLegacy(ContentUris.withAppendedId(
+                        MediaStore.Files.getContentUri(mVolumeName), audioId));
+                final String audioFilePath = queryForData(client, audioFileUri);
+                if (audioFilePath == null)  {
+                    // This shouldn't happen, we should always find audio file
+                    // unless audio file is removed, and database has stale db
+                    // row. However this shouldn't block creating playlist
+                    // files;
+                    Log.e(TAG, "Couldn't find audio file for " + audioId + ", continuing..");
+                    continue;
+                }
+                playlist.add(playOrder, playlistFile.toPath().getParent().
+                        relativize(new File(audioFilePath).toPath()));
+            }
+
+            try {
+                writeToPlaylistFileWithRetry(playlistFile, playlist);
+            } catch (IOException e) {
+                // We only have one shot to migrate data, so log and
+                // keep marching forward.
+                Log.wtf(TAG, "Couldn't migrate playlist file " + playlistFile);
+            }
+        } catch (RemoteException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Return the {@link MediaColumns#DATA} field for the given {@code uri}.
+     */
+    private String queryForData(ContentProviderClient client, @NonNull Uri uri) {
+        try (Cursor c = client.query(uri, new String[] {FileColumns.DATA}, Bundle.EMPTY, null)) {
+            if (c.moveToFirst()) {
+                return c.getString(0);
+            }
+        } catch (Exception e) {
+            Log.wtf(TAG, "Exception occurred while querying for data file for " + uri, e);
+        }
+        return null;
     }
 
     /**
@@ -931,11 +1110,16 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
         sMigrateColumns.add(MediaStore.MediaColumns.IS_FAVORITE);
         sMigrateColumns.add(MediaStore.MediaColumns.OWNER_PACKAGE_NAME);
 
+        sMigrateColumns.add(MediaStore.MediaColumns.ORIENTATION);
+        sMigrateColumns.add(MediaStore.Files.FileColumns.PARENT);
+
         sMigrateColumns.add(MediaStore.Audio.AudioColumns.BOOKMARK);
 
         sMigrateColumns.add(MediaStore.Video.VideoColumns.TAGS);
         sMigrateColumns.add(MediaStore.Video.VideoColumns.CATEGORY);
         sMigrateColumns.add(MediaStore.Video.VideoColumns.BOOKMARK);
+
+        sMigrateColumns.add(MediaStore.Video.VideoColumns.IS_PRIVATE);
 
         sMigrateColumns.add(MediaStore.DownloadColumns.DOWNLOAD_URI);
         sMigrateColumns.add(MediaStore.DownloadColumns.REFERER_URI);
@@ -1320,25 +1504,31 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
         final String selection = FileColumns.MEDIA_TYPE + "=?";
         final String[] selectionArgs = new String[]{String.valueOf(FileColumns.MEDIA_TYPE_NONE)};
 
+        ArrayMap<Long, Integer> newMediaTypes = new ArrayMap<>();
         try (Cursor c = db.query("files", new String[] { FileColumns._ID, FileColumns.MIME_TYPE },
                 selection, selectionArgs, null, null, null, null)) {
             Log.d(TAG, "Recomputing " + c.getCount() + " MediaType values");
 
+            // Accumulate all the new MEDIA_TYPE updates.
             final ContentValues values = new ContentValues();
             while (c.moveToNext()) {
                 values.clear();
                 final long id = c.getLong(0);
                 final String mimeType = c.getString(1);
                 // Only update Document and Subtitle media type
-                if (MimeUtils.isDocumentMimeType(mimeType)) {
-                    values.put(FileColumns.MEDIA_TYPE, FileColumns.MEDIA_TYPE_DOCUMENT);
-                } else if (MimeUtils.isSubtitleMimeType(mimeType)) {
-                    values.put(FileColumns.MEDIA_TYPE, FileColumns.MEDIA_TYPE_SUBTITLE);
-                }
-                if (!values.isEmpty()) {
-                    db.update("files", values, "_id=" + id, null);
+                if (MimeUtils.isSubtitleMimeType(mimeType)) {
+                    newMediaTypes.put(id, FileColumns.MEDIA_TYPE_SUBTITLE);
+                } else if (MimeUtils.isDocumentMimeType(mimeType)) {
+                    newMediaTypes.put(id, FileColumns.MEDIA_TYPE_DOCUMENT);
                 }
             }
+        }
+        // Now, update all the new MEDIA_TYPE values.
+        final ContentValues values = new ContentValues();
+        for (long id: newMediaTypes.keySet()) {
+            values.clear();
+            values.put(FileColumns.MEDIA_TYPE, newMediaTypes.get(id));
+            db.update("files", values, "_id=" + id, null);
         }
     }
 
@@ -1560,7 +1750,33 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
         }
     }
 
-    private static final long RENAME_TIMEOUT = 10 * DateUtils.SECOND_IN_MILLIS;
+    private static final long PASSTHROUGH_WAIT_TIMEOUT = 10 * DateUtils.SECOND_IN_MILLIS;
+
+    /**
+     * When writing to playlist files during migration, the underlying
+     * pass-through view of storage may not be mounted yet, so we're willing
+     * to retry several times before giving up.
+     * The retry logic is mainly added to avoid test flakiness.
+     */
+    private static String writeToPlaylistFileWithRetry(@NonNull File playlistFile,
+            @NonNull Playlist playlist) throws IOException {
+        final long start = SystemClock.elapsedRealtime();
+        while (true) {
+            if (SystemClock.elapsedRealtime() - start > PASSTHROUGH_WAIT_TIMEOUT) {
+                throw new IOException("Passthrough failed to mount");
+            }
+
+            try {
+                playlistFile.getParentFile().mkdirs();
+                playlistFile.createNewFile();
+                playlist.write(playlistFile);
+            } catch (IOException e) {
+                Log.i(TAG, "Failed to migrate playlist file, retrying " + e);
+            }
+            Log.i(TAG, "Waiting for passthrough to be mounted...");
+            SystemClock.sleep(100);
+        }
+    }
 
     /**
      * When renaming files during migration, the underlying pass-through view of
@@ -1571,7 +1787,7 @@ public class DatabaseHelper extends SQLiteOpenHelper implements AutoCloseable {
             throws IOException {
         final long start = SystemClock.elapsedRealtime();
         while (true) {
-            if (SystemClock.elapsedRealtime() - start > RENAME_TIMEOUT) {
+            if (SystemClock.elapsedRealtime() - start > PASSTHROUGH_WAIT_TIMEOUT) {
                 throw new IOException("Passthrough failed to mount");
             }
 

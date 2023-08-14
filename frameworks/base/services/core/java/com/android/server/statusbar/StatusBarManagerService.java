@@ -1088,6 +1088,16 @@ public class StatusBarManagerService extends IStatusBarService.Stub implements D
                 "StatusBarManagerService");
     }
 
+    /**firefly_modify_songjf, add bar interface **/
+    @Override
+    public void addBar() {
+        if (mBar != null) {
+            try {
+                mBar.addBar();
+            } catch (RemoteException ex) {}
+        }
+    }
+
     // ================================================================================
     // Callbacks from the status bar service.
     // ================================================================================

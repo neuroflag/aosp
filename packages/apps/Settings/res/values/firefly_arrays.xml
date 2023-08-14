@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2"> 
+
+    <!--add for orientation-->
+    <string-array name="set_screen_orientation_entries">
+        <item>Auto</item>
+        <item>Horizontal screen</item>
+        <item>Vertical screen</item>
+        <item>Reverse horizontal screen</item>
+        <item>Reverse vertical screen</item>
+    </string-array>
+
+    <string-array name="set_screen_orientation_values" translatable="false">
+        <item>-1</item>
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+
+</resources>

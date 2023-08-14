@@ -63,14 +63,16 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
     private static final int BIT_USB_HEADSET_DGTL = (1 << 3);
     private static final int BIT_HDMI_AUDIO = (1 << 4);
     private static final int BIT_LINEOUT = (1 << 5);
+    private static final int BIT_DP_AUDIO = (1 << 6);
     private static final int SUPPORTED_HEADSETS = (BIT_HEADSET | BIT_HEADSET_NO_MIC |
             BIT_USB_HEADSET_ANLG | BIT_USB_HEADSET_DGTL |
-            BIT_HDMI_AUDIO | BIT_LINEOUT);
+            BIT_HDMI_AUDIO | BIT_LINEOUT | BIT_DP_AUDIO);
 
     private static final String NAME_H2W = "h2w";
     private static final String NAME_USB_AUDIO = "usb_audio";
     private static final String NAME_HDMI_AUDIO = "hdmi_audio";
     private static final String NAME_HDMI = "hdmi";
+    private static final String NAME_DP = "dp";
 
     private static final int MSG_NEW_DEVICE_STATE = 1;
     private static final int MSG_SYSTEM_READY = 2;
@@ -299,6 +301,8 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                 outDevice = AudioManager.DEVICE_OUT_DGTL_DOCK_HEADSET;
             } else if (headset == BIT_HDMI_AUDIO) {
                 outDevice = AudioManager.DEVICE_OUT_HDMI;
+            } else if (headset == BIT_DP_AUDIO) {
+                outDevice = AudioManager.DEVICE_OUT_SPDIF;
             } else {
                 Slog.e(TAG, "setDeviceState() invalid headset type: " + headset);
                 return;
@@ -490,7 +494,7 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
         private final List<ExtconInfo> mExtconInfos;
 
         WiredAccessoryExtconObserver() {
-            mExtconInfos = ExtconInfo.getExtconInfos(".*audio.*");
+            mExtconInfos = ExtconInfo.getExtconInfos(".*extcon.*");
 
         }
 
@@ -527,6 +531,7 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
             updateBit(maskAndState, BIT_HEADSET_NO_MIC, status, "HEADPHONE") ;
             updateBit(maskAndState, BIT_HEADSET, status,"MICROPHONE") ;
             updateBit(maskAndState, BIT_HDMI_AUDIO, status,"HDMI") ;
+            updateBit(maskAndState, BIT_DP_AUDIO, status,"DP");
             updateBit(maskAndState, BIT_LINEOUT, status,"LINE-OUT") ;
             if (LOG) Slog.v(TAG, "mask " + maskAndState[0] + " state " + maskAndState[1]);
             return Pair.create(maskAndState[0],maskAndState[1]);
@@ -549,7 +554,10 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
      * if {@code name=1}  or false if {}@code name=0} is contained in {@code state}.
      */
     private static void updateBit(int[] maskAndState, int position, String state, String name) {
-        maskAndState[0] |= position;
+        if (state.contains("CDP=")) {
+                Slog.d(TAG, "state.contains(CDP=) return");
+                return;
+        }
         if (state.contains(name + "=1")) {
             maskAndState[0] |= position;
             maskAndState[1] |= position;

@@ -334,14 +334,14 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory) : SurfaceFlinger(factory, SkipI
     // Vr flinger is only enabled on Daydream ready devices.
     useVrFlinger = use_vr_flinger(false);
 
-    maxFrameBufferAcquiredBuffers = max_frame_buffer_acquired_buffers(2);
+    maxFrameBufferAcquiredBuffers = max_frame_buffer_acquired_buffers(3);
 
     maxGraphicsWidth = std::max(max_graphics_width(0), 0);
     maxGraphicsHeight = std::max(max_graphics_height(0), 0);
 
     hasWideColorDisplay = has_wide_color_display(false);
 
-    useColorManagement = use_color_management(false);
+    useColorManagement = use_color_management(true);
 
     mDefaultCompositionDataspace =
             static_cast<ui::Dataspace>(default_composition_dataspace(Dataspace::V0_SRGB));
@@ -379,6 +379,11 @@ SurfaceFlinger::SurfaceFlinger(Factory& factory) : SurfaceFlinger(factory, SkipI
 
     // debugging stuff...
     char value[PROPERTY_VALUE_MAX];
+
+#if RK_FPS
+    property_get("debug.sf.fps", value, "0");
+    mDebugFPS = atoi(value);
+#endif
 
     property_get("ro.bq.gpu_to_cpu_unsupported", value, "0");
     mGpuToCpuSupported = !atoi(value);
@@ -788,6 +793,26 @@ size_t SurfaceFlinger::getMaxTextureSize() const {
 size_t SurfaceFlinger::getMaxViewportDims() const {
     return getRenderEngine().getMaxViewportDims();
 }
+
+#if RK_FPS
+void SurfaceFlinger::debugShowFPS() const
+{
+    static int mFrameCount;
+    static int mLastFrameCount = 0;
+    static nsecs_t mLastFpsTime = 0;
+    static float mFps = 0;
+
+    mFrameCount++;
+    nsecs_t now = systemTime();
+    nsecs_t diff = now - mLastFpsTime;
+    if (diff > ms2ns(500)) {
+        mFps =  ((mFrameCount - mLastFrameCount) * float(s2ns(1))) / diff;
+        mLastFpsTime = now;
+        mLastFrameCount = mFrameCount;
+        ALOGD("mFrameCount = %d mFps = %2.3f",mFrameCount, mFps);
+    }
+}
+#endif
 
 // ----------------------------------------------------------------------------
 
@@ -2040,6 +2065,10 @@ bool SurfaceFlinger::handleMessageTransaction() {
     return runHandleTransaction;
 }
 
+#if RK_FPS
+static int gsFrameCcount = 0;
+#endif
+
 void SurfaceFlinger::onMessageRefresh() {
     ATRACE_CALL();
 
@@ -2126,6 +2155,18 @@ void SurfaceFlinger::onMessageRefresh() {
     mVSyncModulator->onRefreshed(mHadClientComposition || mReusedClientComposition);
 
     mLayersWithQueuedFrames.clear();
+#if RK_FPS
+    if(gsFrameCcount++%300==0) {
+        gsFrameCcount = 1;
+        char value[PROPERTY_VALUE_MAX];
+        property_get("debug.sf.fps", value, "0");
+        mDebugFPS = atoi(value);
+    }
+
+    if (mDebugFPS > 0)
+        debugShowFPS();
+#endif
+
     if (mVisibleRegionsDirty) {
         mVisibleRegionsDirty = false;
         if (mTracingEnabled && mAddCompositionStateToTrace) {
@@ -2222,6 +2263,9 @@ void SurfaceFlinger::postComposition()
         layer->releasePendingBuffer(dequeueReadyTime);
     }
 
+    //RK support: to set DispSync mRefreshSkipCount by property.
+    mScheduler->getPrimaryDispSync().updateRefreshSkipCountByProperty();
+
     const auto* display = ON_MAIN_THREAD(getDefaultDisplayDeviceLocked()).get();
 
     getBE().mGlCompositionDoneTimeline.updateSignalTimes();
@@ -2280,6 +2324,7 @@ void SurfaceFlinger::postComposition()
             mScheduler->enableHardwareVsync();
         }
     }
+
 
     if (mAnimCompositionPending) {
         mAnimCompositionPending = false;
@@ -2569,7 +2614,24 @@ sp<DisplayDevice> SurfaceFlinger::setupNewDisplayDeviceInternal(
     }
 
     display->setLayerStack(state.layerStack);
-    display->setProjection(state.orientation, state.viewport, state.frame);
+
+    //display->setProjection(state.orientation, state.viewport, state.frame);
+    //Per-orientation Width Height problem
+    if(creationArgs.physicalOrientation == ui::ROTATION_90 ||
+       creationArgs.physicalOrientation == ui::ROTATION_270)
+    {
+        //ALOGE("rk-debug[%s %d] name:%s physicalOrientation:%d \n",
+        //    __FUNCTION__,__LINE__,state.displayName.c_str(),creationArgs.physicalOrientation);
+        display->setProjection(state.orientation, Rect(display->getHeight(),
+                                 display->getWidth()), Rect(display->getHeight(), display->getWidth()));
+    }
+    else{
+        //ALOGE("rk-debug[%s %d] name:%s physicalOrientation:%d \n",
+        //    __FUNCTION__,__LINE__,state.displayName.c_str(),creationArgs.physicalOrientation);
+        display->setProjection(state.orientation, state.viewport, state.frame);
+    }
+    //end
+
     display->setDisplayName(state.displayName);
 
     return display;
@@ -2697,6 +2759,11 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
         if (currentState.layerStack != drawingState.layerStack) {
             display->setLayerStack(currentState.layerStack);
         }
+
+        if (currentState.width != drawingState.width ||
+            currentState.height != drawingState.height) {
+            display->setDisplaySize(currentState.width, currentState.height);
+        }
         if ((currentState.orientation != drawingState.orientation) ||
             (currentState.viewport != drawingState.viewport) ||
             (currentState.frame != drawingState.frame)) {
@@ -2705,7 +2772,6 @@ void SurfaceFlinger::processDisplayChanged(const wp<IBinder>& displayToken,
         }
         if (currentState.width != drawingState.width ||
             currentState.height != drawingState.height) {
-            display->setDisplaySize(currentState.width, currentState.height);
 
             if (display->isPrimary()) {
                 mScheduler->onPrimaryDisplayAreaChanged(currentState.width * currentState.height);
@@ -5818,7 +5884,6 @@ void SurfaceFlinger::renderScreenImplLocked(const RenderArea& renderArea,
     clientCompositionDisplay.physicalDisplay = Rect(reqWidth, reqHeight);
     clientCompositionDisplay.clip = sourceCrop;
     clientCompositionDisplay.orientation = rotation;
-
     clientCompositionDisplay.outputDataspace = renderArea.getReqDataSpace();
     clientCompositionDisplay.maxLuminance = DisplayDevice::sDefaultMaxLumiance;
 

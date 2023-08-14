@@ -178,7 +178,7 @@ static int wpa_supplicant_init_match(struct wpa_global *global)
 #endif /* CONFIG_MATCH_IFACE */
 
 
-int main(int argc, char *argv[])
+int main_loop(int argc, char *argv[])
 {
 	int c, i;
 	struct wpa_interface *ifaces, *iface;
@@ -190,7 +190,7 @@ int main(int argc, char *argv[])
 		return -1;
 
 	os_memset(&params, 0, sizeof(params));
-	params.wpa_debug_level = MSG_INFO;
+	params.wpa_debug_level = MSG_DEBUG;
 
 	iface = ifaces = os_zalloc(sizeof(struct wpa_interface));
 	if (ifaces == NULL)
@@ -406,4 +406,100 @@ out:
 	os_program_deinit();
 
 	return exitcode;
+}
+
+#define BROADCOM_MODULE_NAME "[broadcom]"
+#define REALTEK_MODULE_NAME "[realtek]"
+#define SSV_MODULE_NAME "[ssv]"
+#define ESP_MODULE_NAME "[esp]"
+#define SPRDWL_MODULE_NAME "[sprdwl]"
+
+int read_wpa_param_config(char *module_name, char *file_path) {
+	char *wpa_param[50] = {0};
+	char wpa_param_buf[50][50];
+	int wpa_param_len = 0;
+	char buf[256] = {0};
+	FILE *fp = NULL;
+	char *pos;
+	int ret = -1;
+	int found = 0;
+	int i;
+	fp = fopen(file_path, "r");
+	wpa_printf(MSG_INFO,"module_name = %s\n",module_name);
+	if (fp == NULL) {
+		wpa_printf(MSG_ERROR,"%s not found\n",file_path);
+		return -1;
+	}
+	while(fgets(buf, sizeof(buf) -1, fp)) {
+		pos = buf;
+		while (*pos != '\0') {
+			if (*pos == '\n' || *pos == ' ') {
+				*pos = '\0';
+				break;
+			}
+			pos++;
+		}
+		if(found == 0) {
+			if(strstr(buf,module_name)) {
+				found = 1;
+				wpa_printf(MSG_INFO,"found %s\n",module_name);
+			}
+			continue;
+		}
+		if(buf[0] == '\n' || buf[0] == '\0'|| buf[0] == '#' || buf[0] == ' ' || buf[0] == '[') {
+			wpa_printf(MSG_INFO,"wpa_param_len = %d\n",wpa_param_len);
+			break;
+		}
+		strcpy(wpa_param_buf[wpa_param_len],buf);
+		wpa_param_len++;
+	}
+	fclose(fp);
+	for(i = 0; i < wpa_param_len; i++) {
+		wpa_param[i] = wpa_param_buf[i];
+		wpa_printf(MSG_INFO,"wpa_param_len = %d | wpa_param[%d] = %s\n",wpa_param_len,i,wpa_param[i]);
+	}
+	if(wpa_param_len > 0)
+		ret = main_loop(wpa_param_len,wpa_param);
+	else
+		wpa_printf(MSG_ERROR,"%s not found\n",module_name);
+	return ret;
+}
+
+int main(int argc, char *argv[])
+{
+	int ret = -1;
+	char module_type[20]={0};
+
+	wpa_printf(MSG_INFO,"argc = %d\n",argc);
+	if(argc == 2) {
+		if (wifi_type[0] == 0) {
+			check_wifi_chip_type_string(wifi_type);
+		}
+		wpa_printf(MSG_INFO,"Current wifi chip is %s\n",wifi_type);
+		if (0 == strncmp(wifi_type, "RTL", 3)) {
+			wpa_printf(MSG_INFO,"Start rtl_wpa_supplicant\n");
+			ret = read_wpa_param_config(REALTEK_MODULE_NAME,argv[1]);
+		} else if (0 == strncmp(wifi_type, "AP", 2)) {
+			wpa_printf(MSG_INFO,"Start bcm_wpa_supplicant\n");
+			ret = read_wpa_param_config(BROADCOM_MODULE_NAME,argv[1]);
+		} else if (0 == strncmp(wifi_type, "SSV", 3) ||
+			   0 == strncmp(wifi_type, "RK912", 5)) {
+			wpa_printf(MSG_INFO,"Start ssv_wpa_supplicant\n");
+			ret = read_wpa_param_config(SSV_MODULE_NAME,argv[1]);
+		} else if (0 == strncmp(wifi_type, "ESP", 3)) {
+			wpa_printf(MSG_INFO,"Start esp_wpa_supplicant\n");
+			ret = read_wpa_param_config(ESP_MODULE_NAME,argv[1]);
+		} else if (0 == strncmp(wifi_type, "SPRDWL", 6)) {
+			wpa_printf(MSG_INFO,"Start sprdwl_wpa_supplicant\n");
+			ret = read_wpa_param_config(SPRDWL_MODULE_NAME,argv[1]);
+		} else {
+			wpa_printf(MSG_INFO,"Start wpa_supplicant\n");
+			sprintf(module_type,"[%s]",wifi_type);
+			ret = read_wpa_param_config(module_type,argv[1]);
+		}
+	} else {
+		wpa_printf(MSG_INFO,"Start wpa_supplicant\n");
+		ret = main_loop(argc, argv);
+	}
+	return ret;
 }

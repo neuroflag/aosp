@@ -36,6 +36,7 @@
 #include <media/RecordBufferConverter.h>
 #include <mediautils/ServiceUtilities.h>
 #include <audio_utils/minifloat.h>
+#include <cutils/properties.h>
 
 // ----------------------------------------------------------------------------
 
@@ -497,6 +498,14 @@ void AudioFlinger::PlaybackThread::OpPlayAudioMonitor::PlayAudioOpCallback::opCh
 void AudioFlinger::PlaybackThread::OpPlayAudioMonitor::getPackagesForUid(
     uid_t uid, Vector<String16>& packages)
 {
+    char value[PROPERTY_VALUE_MAX] = "";
+    property_get("persist.sys.bootvideo.enable",value, "false");
+    if(!strcmp(value, "true")) {
+        property_get("sys.bootvideo.closed", value, "0");
+        if (atoi(value) == 0){
+            return;
+        }
+    }
     PermissionController permissionController;
     permissionController.getPackagesForUid(uid, packages);
 }

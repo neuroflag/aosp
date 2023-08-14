@@ -1524,6 +1524,9 @@ static void StripStartcode(MediaBuffer *buffer) {
     if (!memcmp(ptr, "\x00\x00\x00\x01", 4)) {
         buffer->set_range(
                 buffer->range_offset() + 4, buffer->range_length() - 4);
+    } else if (!memcmp(ptr, "\x00\x00\x01", 3)) {
+        buffer->set_range(
+                buffer->range_offset() + 3, buffer->range_length() - 3);
     }
 }
 
@@ -2691,7 +2694,7 @@ bool MPEG4Writer::findChunkToWrite(Chunk *chunk) {
 
 void MPEG4Writer::threadFunc() {
     ALOGV("threadFunc");
-
+    androidSetThreadPriority(0, ANDROID_PRIORITY_HIGHEST);
     prctl(PR_SET_NAME, (unsigned long)"MPEG4Writer", 0, 0, 0);
 
     Mutex::Autolock autoLock(mLock);

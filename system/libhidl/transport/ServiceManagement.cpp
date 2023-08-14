@@ -625,8 +625,8 @@ struct Waiter : IServiceNotification {
             if (mRegistered) {
                 break;
             }
-
-            LOG(WARNING) << "Waited one second for " << mInterfaceName << "/" << mInstanceName;
+            if(strcmp(mInterfaceName.c_str(),"android.hardware.radio@1.1::IRadio") != 0)
+                LOG(WARNING) << "Waited one second for " << mInterfaceName << "/" << mInstanceName;
         } while (!timeout);
     }
 
@@ -733,6 +733,7 @@ sp<::android::hidl::base::V1_0::IBase> getRawServiceInternal(const std::string& 
 
     sp<IServiceManager1_1> sm;
     Transport transport = Transport::EMPTY;
+
     if (kIsRecovery) {
         transport = Transport::PASSTHROUGH;
     } else {
@@ -800,7 +801,8 @@ sp<::android::hidl::base::V1_0::IBase> getRawServiceInternal(const std::string& 
         if (vintfLegacy || !retry) break;
 
         if (waiter != nullptr) {
-            ALOGI("getService: Trying again for %s/%s...", descriptor.c_str(), instance.c_str());
+            if(strcmp(descriptor.c_str(),"android.hardware.radio@1.1::IRadio") != 0)
+                ALOGI("getService: Trying again for %s/%s...", descriptor.c_str(), instance.c_str());
             waiter->wait(true /* timeout */);
         }
     }

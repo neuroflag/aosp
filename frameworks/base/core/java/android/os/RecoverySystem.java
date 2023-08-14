@@ -109,6 +109,7 @@ public class RecoverySystem {
     private static final File LOG_FILE = new File(RECOVERY_DIR, "log");
     private static final String LAST_INSTALL_PATH = "last_install";
     private static final String LAST_PREFIX = "last_";
+    private static final String RECOVERY_TEST_STATE  = "Recovery_state";
     private static final String ACTION_EUICC_FACTORY_RESET =
             "com.android.internal.action.EUICC_FACTORY_RESET";
     private static final String ACTION_EUICC_REMOVE_INVISIBLE_SUBSCRIPTIONS =
@@ -616,7 +617,8 @@ public class RecoverySystem {
             String reason = PowerManager.REBOOT_RECOVERY_UPDATE;
 
             // On TV, reboot quiescently if the screen is off
-            if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+            if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+                || context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION)) {
                 DisplayManager dm = context.getSystemService(DisplayManager.class);
                 if (dm.getDisplay(DEFAULT_DISPLAY).getState() != Display.STATE_ON) {
                     reason += ",quiescent";
@@ -822,6 +824,7 @@ public class RecoverySystem {
      */
     public static void rebootWipeUserData(Context context, boolean shutdown, String reason,
             boolean force, boolean wipeEuicc) throws IOException {
+	SystemProperties.set("app.firefly.config","1");
         UserManager um = (UserManager) context.getSystemService(Context.USER_SERVICE);
         if (!force && um.hasUserRestriction(UserManager.DISALLOW_FACTORY_RESET)) {
             throw new SecurityException("Wiping data is not allowed for this user.");
@@ -1208,8 +1211,10 @@ public class RecoverySystem {
         for (int i = 0; names != null && i < names.length; i++) {
             // Do not remove the last_install file since the recovery-persist takes care of it.
             if (names[i].startsWith(LAST_PREFIX) || names[i].equals(LAST_INSTALL_PATH)) continue;
+            if (names[i].equals(RECOVERY_TEST_STATE)) continue;
             if (reservePackage && names[i].equals(BLOCK_MAP_FILE.getName())) continue;
             if (reservePackage && names[i].equals(UNCRYPT_PACKAGE_FILE.getName())) continue;
+            Log.i(TAG,"names[i]:" + names[i]);
 
             recursiveDelete(new File(RECOVERY_DIR, names[i]));
         }

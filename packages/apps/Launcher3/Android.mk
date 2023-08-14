@@ -234,7 +234,14 @@ LOCAL_PROGUARD_ENABLED := full
 LOCAL_PACKAGE_NAME := Launcher3QuickStepGo
 LOCAL_PRIVILEGED_MODULE := true
 LOCAL_SYSTEM_EXT_MODULE := true
-LOCAL_OVERRIDES_PACKAGES := Home Launcher2 Launcher3 Launcher3QuickStep
+
+ifneq ($(filter rk3566_eink rk3566_einkw6, $(strip $(TARGET_PRODUCT))), )
+LOCAL_OVERRIDES_PACKAGES := Home Launcher2 Launcher3 Launcher3QuickStep \
+    Calendar Contacts Lightning QuickSearchBox RkExplorer
+else
+LOCAL_OVERRIDES_PACKAGES := Home Launcher2 Launcher3 Launcher3QuickStep Launcher3Go PhotoTable
+endif
+
 LOCAL_REQUIRED_MODULES := privapp_whitelist_com.android.launcher3
 
 LOCAL_FULL_LIBS_MANIFEST_FILES := \

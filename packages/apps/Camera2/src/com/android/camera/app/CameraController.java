@@ -169,7 +169,8 @@ public class CameraController implements CameraAgent.CameraOpenCallback, CameraP
     @Override
     public void onCameraOpened(CameraAgent.CameraProxy camera) {
         Log.v(TAG, "onCameraOpened");
-        if (mRequestingCameraId != camera.getCameraId()) {
+        if (mRequestingCameraId != camera.getCameraId()
+                && camera == mCameraProxy) {
             return;
         }
         mCameraProxy = camera;

@@ -480,7 +480,10 @@ class RecentTasks {
         }
 
         Slog.i(TAG, "Loading recents for user " + userId + " into memory.");
-        List<Task> tasks = mTaskPersister.restoreTasksForUserLocked(userId, preaddedTasks);
+        // List<Task> tasks = mTaskPersister.restoreTasksForUserLocked(userId, preaddedTasks);
+        mTaskPersister.restoreTasksForUserLocked(userId, preaddedTasks);
+        List<Task> tasks = new ArrayList<Task>();
+        
         mTasks.addAll(tasks);
         cleanupLocked(userId);
         mUsersWithRecentsLoaded.put(userId, true);

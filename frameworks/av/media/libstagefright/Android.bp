@@ -173,6 +173,8 @@ cc_library_shared {
         "libsync",
         "libui",
         "libutils",
+        "librga",
+        "libgraphicpolicy",
     ],
 
     static_libs: [
@@ -241,6 +243,7 @@ cc_library {
         "RemoteMediaSource.cpp",
         "SimpleDecodingSource.cpp",
         "StagefrightMediaScanner.cpp",
+        "SurfaceMediaSource.cpp",
         "SurfaceUtils.cpp",
         "ThrottledSource.cpp",
         "Utils.cpp",

@@ -19,7 +19,7 @@
     xmlns:settings="http://schemas.android.com/apk/res-auto"
     android:key="network_and_internet_screen"
     android:title="@string/network_dashboard_title"
-    settings:initialExpandedChildrenCount="5">
+    settings:initialExpandedChildrenCount="6">
 
     <PreferenceCategory
         android:key="multi_network_header"
@@ -117,6 +117,24 @@
         android:dialogLayout="@layout/private_dns_mode_dialog"
         android:positiveButtonText="@string/save"
         android:negativeButtonText="@android:string/cancel" />
+
+    <com.android.settingslib.RestrictedPreference
+        android:fragment="com.android.settings.ethernet.EthernetSettings"
+        android:icon="@drawable/ic_ethernet"
+        android:key="ethernet_settings"
+        android:title="@string/ethernet_settings_title"
+        android:order="-2"
+        settings:useAdminDisabledSummary="true"
+	settings:userRestriction="no_ethernet_settings" />
+
+    <com.android.settingslib.RestrictedPreference
+	    android:fragment="com.android.settings.ethernet.EthernetSettingsExt"
+	    android:icon="@drawable/ic_ethernet"
+	    android:key="ethernet_settings_ext"
+	    android:title="@string/ethernet_settings_title_ext"
+        android:order="-1"
+	    settings:useAdminDisabledSummary="true"
+	    settings:userRestriction="no_ethernet_settings" />
 
     <Preference
         android:fragment="com.android.settings.network.AdaptiveConnectivitySettings"

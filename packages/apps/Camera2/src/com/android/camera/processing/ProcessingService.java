@@ -17,6 +17,7 @@
 package com.android.camera.processing;
 
 import android.app.Notification;
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.Service;
 import android.content.BroadcastReceiver;
@@ -73,7 +74,7 @@ public class ProcessingService extends Service implements ProgressListener {
 
     private static final Log.Tag TAG = new Log.Tag("ProcessingService");
     private static final int THREAD_PRIORITY = Process.THREAD_PRIORITY_BACKGROUND;
-    private static final int CAMERA_NOTIFICATION_ID = 2;
+    private static final int CAMERA_NOTIFICATION_ID = 0;
     private Notification.Builder mNotificationBuilder;
     private NotificationManager mNotificationManager;
 
@@ -101,6 +102,7 @@ public class ProcessingService extends Service implements ProgressListener {
 
     @Override
     public void onCreate() {
+        Log.d(TAG, "onCreate");
         mProcessingServiceManager = ProcessingServiceManager.instance();
         mSessionManager = getServices().getCaptureSessionManager();
 
@@ -113,8 +115,8 @@ public class ProcessingService extends Service implements ProgressListener {
         intentFilter.addAction(ACTION_PAUSE_PROCESSING_SERVICE);
         intentFilter.addAction(ACTION_RESUME_PROCESSING_SERVICE);
         LocalBroadcastManager.getInstance(this).registerReceiver(mServiceController, intentFilter);
-        mNotificationBuilder = createInProgressNotificationBuilder();
         mNotificationManager = AndroidServices.instance().provideNotificationManager();
+        mNotificationBuilder = createInProgressNotificationBuilder();
     }
 
     @Override
@@ -252,14 +254,18 @@ public class ProcessingService extends Service implements ProgressListener {
     }
 
     private void postNotification() {
-        mNotificationManager.notify(CAMERA_NOTIFICATION_ID, mNotificationBuilder.build());
+        //mNotificationManager.notify(CAMERA_NOTIFICATION_ID, mNotificationBuilder.build());
     }
 
     /**
      * Creates a notification to indicate that a computation is in progress.
      */
     private Notification.Builder createInProgressNotificationBuilder() {
-        return new Notification.Builder(this)
+        NotificationChannel channel = new NotificationChannel("camera_save",
+                "camera_save", NotificationManager.IMPORTANCE_DEFAULT);
+        mNotificationManager.createNotificationChannel(channel);
+
+        return new Notification.Builder(this, "camera_save")
                 .setSmallIcon(R.drawable.ic_notification)
                 .setWhen(System.currentTimeMillis())
                 .setOngoing(true)

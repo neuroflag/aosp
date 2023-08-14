@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+	<!--firefly_modify_songjf,add add/remove bar button-->
+	<string name="hidebar_msg">"系统栏已经被隐藏\n您可以在屏幕下边缘拖拉再次显示它。" </string>
+</resources>

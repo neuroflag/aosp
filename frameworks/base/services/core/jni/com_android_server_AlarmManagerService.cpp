@@ -80,6 +80,7 @@ public:
 
     int set(int type, struct timespec *ts);
     int setTime(struct timeval *tv);
+    int setRtcALarmTime(struct timeval *tv,bool enabled);
     int waitForAlarm();
     int getTime(int type, struct itimerspec *spec);
 
@@ -180,6 +181,85 @@ done:
     return res;
 }
 
+int AlarmImpl::setRtcALarmTime(struct timeval *tv,bool enabled)
+{
+    ALOGD("AlarmImplTimerFd setRtcALarmTime 2:%d\n",enabled);
+   // struct rtc_time rtc;
+    struct tm tm, *gmtime_res;
+    int fd;
+    int res;
+
+
+    if (rtc_id < 0) {
+        ALOGV("Not setting RTC because wall clock RTC was not found");
+        errno = ENODEV;
+        return -1;
+    }
+
+    android::String8 rtc_dev = String8::format("/dev/rtc%d", rtc_id);
+    fd = open(rtc_dev.string(), O_RDWR);
+    if (fd < 0) {
+        ALOGV("Unable to open %s: %s\n", rtc_dev.string(), strerror(errno));
+        return -1;
+    }
+
+
+    gmtime_res = gmtime_r(&tv->tv_sec, &tm);
+    if (!gmtime_res) {
+        ALOGV("gmtime_r() failed: %s\n", strerror(errno));
+        res = -1;
+        goto done;
+    }
+
+    struct rtc_wkalrm alarm;
+
+    alarm.time.tm_sec = tm.tm_sec;
+    alarm.time.tm_min = tm.tm_min;
+    alarm.time.tm_hour = tm.tm_hour;
+    alarm.time.tm_mday = tm.tm_mday;
+    alarm.time.tm_mon = tm.tm_mon;
+    alarm.time.tm_year = tm.tm_year;
+    alarm.time.tm_wday = tm.tm_wday;
+    alarm.time.tm_yday = tm.tm_yday;
+    alarm.time.tm_isdst = tm.tm_isdst;
+    alarm.enabled = 1;
+
+
+    if(!enabled){
+        res = ioctl(fd, RTC_AIE_OFF, 0);
+         ALOGD("RTC_AIE_OFF:%d",res);
+    }else{
+        struct timeval now;
+        gettimeofday(&now, NULL);
+    
+        long long set_time, cur_time, interval_time;
+        set_time = tv->tv_sec;
+        cur_time = now.tv_sec;
+        interval_time = set_time - cur_time;
+        ALOGD("set_time:%lld", set_time);
+        ALOGD("cur_time:%lld", cur_time);
+        ALOGD("interval_time:%lld", interval_time);
+
+        if((interval_time)>= 24*3600)
+        {
+
+            res = ioctl(fd,RTC_WKALM_SET, &alarm);
+            ALOGD("RTC_WKALM_SET,NO NEED RTC_AIE_ON");
+        }else{
+            res = ioctl(fd, RTC_ALM_SET, &alarm.time);
+            res = ioctl(fd, RTC_AIE_ON, 0);
+            ALOGD("RTC_ALM_SET");
+        }
+    
+        ALOGD("AlarmImplTimerFd setRtcALarmTime res:%d\n",res);
+        if (res < 0)
+            ALOGD("RTC_SET_TIME ioctl failed: %s\n", strerror(errno));
+    }
+done:
+    close(fd);
+    return res;
+}
+
 int AlarmImpl::waitForAlarm()
 {
     epoll_event events[N_ANDROID_TIMERFDS];
@@ -250,6 +330,33 @@ static jint android_server_AlarmManagerService_setKernelTimezone(JNIEnv*, jobjec
     }
 
     return 0;
+}
+
+
+static int android_server_AlarmManagerService_updateRtcAlarm(JNIEnv* env, jobject obj,jlong nativeData, jlong millis,jboolean enabled)
+{
+   ALOGD("updateRtcAlarm ");
+   AlarmImpl *impl = reinterpret_cast<AlarmImpl *>(nativeData);
+   struct timeval tv;
+   int ret;
+
+   if (millis <= 0 || millis / 1000LL >= INT_MAX) {
+        ALOGD("updateRtcAlarm 1");   
+        return -1;
+   }
+
+    tv.tv_sec = (time_t) (millis / 1000LL);
+    tv.tv_usec = (suseconds_t) ((millis % 1000LL) * 1000LL);
+
+    ALOGD("Setting time of day to sec=%d\n", (int) tv.tv_sec);
+
+    ret = impl->setRtcALarmTime(&tv,enabled);
+    ALOGD("updateRtcAlarm ret:%d\n",ret);
+    if(ret < 0) {
+        ALOGD("Unable to set rtc to %ld: %s\n", tv.tv_sec, strerror(errno));
+        ret = -1;
+    }
+    return ret;
 }
 
 static const char rtc_sysfs[] = "/sys/class/rtc";
@@ -459,6 +566,7 @@ static const JNINativeMethod sMethods[] = {
     {"waitForAlarm", "(J)I", (void*)android_server_AlarmManagerService_waitForAlarm},
     {"setKernelTime", "(JJ)I", (void*)android_server_AlarmManagerService_setKernelTime},
     {"setKernelTimezone", "(JI)I", (void*)android_server_AlarmManagerService_setKernelTimezone},
+    {"updateRtcAlarm", "(JJZ)I", (void*)android_server_AlarmManagerService_updateRtcAlarm},
     {"getNextAlarm", "(JI)J", (void*)android_server_AlarmManagerService_getNextAlarm},
 };
 

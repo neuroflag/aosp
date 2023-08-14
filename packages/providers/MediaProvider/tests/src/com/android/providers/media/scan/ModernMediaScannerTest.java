@@ -925,6 +925,23 @@ public class ModernMediaScannerTest {
         }
     }
 
+    @Test
+    public void testScan_BitmapFile() throws Exception {
+        final File bmp = new File(mDir, "image.bmp");
+        stage(R.raw.test_bmp, bmp);
+
+        final Uri uri = mModern.scanFile(bmp, REASON_UNKNOWN);
+        try (Cursor cursor = mIsolatedResolver
+                .query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, null, null, null, null)) {
+            assertEquals(1, cursor.getCount());
+            cursor.moveToFirst();
+            assertEquals(1280,
+                    cursor.getInt(cursor.getColumnIndex(MediaColumns.WIDTH)));
+            assertEquals(720,
+                    cursor.getInt(cursor.getColumnIndex(MediaColumns.HEIGHT)));
+        }
+    }
+
     /**
      * Executes a shell command.
      */
@@ -947,6 +964,74 @@ public class ModernMediaScannerTest {
         try (FileInputStream output = new FileInputStream(
                 uiAutomation.executeShellCommand(cmd).getFileDescriptor())) {
             return new String(ByteStreams.toByteArray(output));
+        }
+    }
+
+    @Test
+    public void testPlaylistDeletion() throws Exception {
+        final File music = new File(mDir, "Music");
+        music.mkdirs();
+        stage(R.raw.test_audio, new File(music, "001.mp3"));
+        stage(R.raw.test_audio, new File(music, "002.mp3"));
+        stage(R.raw.test_audio, new File(music, "003.mp3"));
+        stage(R.raw.test_audio, new File(music, "004.mp3"));
+        stage(R.raw.test_audio, new File(music, "005.mp3"));
+        stage(R.raw.test_m3u, new File(music, "test.m3u"));
+
+        mModern.scanDirectory(mDir, REASON_UNKNOWN);
+
+        final Uri playlistUri = MediaStore.Audio.Playlists.EXTERNAL_CONTENT_URI;
+        final long playlistId;
+        try (Cursor cursor = mIsolatedContext.getContentResolver().query(playlistUri,
+                new String[] { FileColumns._ID }, null, null)) {
+            assertTrue(cursor.moveToFirst());
+            playlistId = cursor.getLong(0);
+        }
+
+        final int count = mIsolatedContext.getContentResolver().delete(
+                ContentUris.withAppendedId(playlistUri, playlistId), null);
+        assertEquals(1, count);
+
+        MediaStore.waitForIdle(mIsolatedResolver);
+
+        final Uri membersUri = MediaStore.Audio.Playlists.Members
+                .getContentUri(MediaStore.VOLUME_EXTERNAL, playlistId);
+        try (Cursor cursor = mIsolatedResolver.query(membersUri, null, null, null)) {
+            assertEquals(0, cursor.getCount());
+        }
+    }
+
+    @Test
+    public void testPlaylistMembersDeletion() throws Exception {
+        final File music = new File(mDir, "Music");
+        music.mkdirs();
+        stage(R.raw.test_audio, new File(music, "001.mp3"));
+        stage(R.raw.test_audio, new File(music, "002.mp3"));
+        stage(R.raw.test_audio, new File(music, "003.mp3"));
+        stage(R.raw.test_audio, new File(music, "004.mp3"));
+        stage(R.raw.test_audio, new File(music, "005.mp3"));
+        stage(R.raw.test_m3u, new File(music, "test.m3u"));
+
+        mModern.scanDirectory(mDir, REASON_UNKNOWN);
+
+        final Uri playlistUri = MediaStore.Audio.Playlists.EXTERNAL_CONTENT_URI;
+        final long playlistId;
+        try (Cursor cursor = mIsolatedContext.getContentResolver().query(playlistUri,
+                new String[] { FileColumns._ID }, null, null)) {
+            assertTrue(cursor.moveToFirst());
+            playlistId = cursor.getLong(0);
+        }
+
+        final int count = mIsolatedContext.getContentResolver().delete(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, null);
+        assertEquals(5, count);
+
+        MediaStore.waitForIdle(mIsolatedResolver);
+
+        final Uri membersUri = MediaStore.Audio.Playlists.Members
+                .getContentUri(MediaStore.VOLUME_EXTERNAL, playlistId);
+        try (Cursor cursor = mIsolatedResolver.query(membersUri, null, null, null)) {
+            assertEquals(0, cursor.getCount());
         }
     }
 }

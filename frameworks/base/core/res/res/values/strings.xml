@@ -4039,7 +4039,7 @@
     <string name="action_bar_home_subtitle_description_format">%1$s, %2$s, %3$s</string>
 
     <!-- Storage description for internal shared storage. [CHAR LIMIT=NONE] -->
-    <string name="storage_internal">Internal shared storage</string>
+    <string name="storage_internal">Internal storage</string>
 
     <!-- Storage description for a generic SD card. [CHAR LIMIT=NONE] -->
     <string name="storage_sd_card">SD card</string>
@@ -4053,6 +4053,12 @@
 
     <!-- Storage description for USB storage. [CHAR LIMIT=NONE] -->
     <string name="storage_usb">USB storage</string>
+
+    <string name="storage_pcie_drive">M.2 SSD</string>
+
+    <string name="storage_harddisk_drive">HardDisk storage</string>
+
+    <string name="storage_shareblock_drive">ShareBlock storage</string>
 
     <!-- Button text for the edit menu in input method extract mode. [CHAR LIMIT=16] -->
     <string name="extract_edit_menu_button">Edit</string>

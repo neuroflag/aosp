@@ -157,7 +157,11 @@ class AppWarnings {
      * @param r activity record for which the warning may be displayed
      */
     public void showDeprecatedTargetDialogIfNeeded(ActivityRecord r) {
-        if (r.info.applicationInfo.targetSdkVersion < Build.VERSION.MIN_SUPPORTED_TARGET_SDK_INT) {
+   	if( "com.rockchip.devicetest".equals(r.packageName) || "com.antutu.benchmark.full".equals(r.packageName)){
+            return ;
+        }
+
+       	if (r.info.applicationInfo.targetSdkVersion < Build.VERSION.MIN_SUPPORTED_TARGET_SDK_INT) {
             mUiHandler.showDeprecatedTargetDialog(r);
         }
     }

@@ -37,6 +37,8 @@ import static android.content.Intent.EXTRA_PACKAGE_NAME;
 import static android.content.Intent.EXTRA_VERSION_CODE;
 import static android.content.pm.PackageManager.CERT_INPUT_RAW_X509;
 import static android.content.pm.PackageManager.CERT_INPUT_SHA256;
+import static android.content.Intent.CATEGORY_BROWSABLE;
+import static android.content.Intent.CATEGORY_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED;
@@ -63,6 +65,7 @@ import static android.content.pm.PackageManager.INSTALL_FAILED_PACKAGE_CHANGED;
 import static android.content.pm.PackageManager.INSTALL_FAILED_PROCESS_NOT_DEFINED;
 import static android.content.pm.PackageManager.INSTALL_FAILED_SHARED_USER_INCOMPATIBLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_TEST_ONLY;
+import static android.content.pm.PackageManager.INSTALL_FAILED_UNINSTALLED_PREBUNDLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_UPDATE_INCOMPATIBLE;
 import static android.content.pm.PackageManager.INSTALL_FAILED_VERSION_DOWNGRADE;
 import static android.content.pm.PackageManager.INSTALL_INTERNAL;
@@ -100,6 +103,8 @@ import static android.content.pm.PackageManager.RESTRICTION_NONE;
 import static android.content.pm.PackageManager.UNINSTALL_REASON_UNKNOWN;
 import static android.content.pm.PackageParser.SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V4;
 import static android.content.pm.PackageParser.isApkFile;
+import static android.content.pm.PackageParser.isDeleteApk;
+import static android.content.pm.PackageParser.readDeleteFile;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.os.incremental.IncrementalManager.isIncrementalPath;
 import static android.os.storage.StorageManager.FLAG_STORAGE_CE;
@@ -239,6 +244,7 @@ import android.content.pm.parsing.component.ParsedProvider;
 import android.content.pm.parsing.component.ParsedService;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.rollback.IRollbackManager;
 import android.database.ContentObserver;
@@ -259,6 +265,7 @@ import android.os.Message;
 import android.os.Parcel;
 import android.os.PatternMatcher;
 import android.os.PersistableBundle;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
@@ -391,14 +398,18 @@ import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.InputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.RandomAccessFile;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.charset.StandardCharsets;
@@ -495,6 +506,9 @@ public class PackageManagerService extends IPackageManager.Stub
     private static final boolean DEBUG_INSTANT = Build.IS_DEBUGGABLE;
     private static final boolean DEBUG_APP_DATA = false;
 
+    //for UiMode Debug
+    private static final boolean DEBUG_UIMODE = Log.isLoggable(TAG, Log.DEBUG);
+
     /** REMOVE. According to Svet, this was only used to reset permissions during development. */
     static final boolean CLEAR_RUNTIME_PERMISSIONS_ON_UPGRADE = false;
 
@@ -535,6 +549,8 @@ public class PackageManagerService extends IPackageManager.Stub
     static final int SCAN_AS_SYSTEM_EXT = 1 << 21;
     static final int SCAN_AS_ODM = 1 << 22;
     static final int SCAN_AS_APK_IN_APEX = 1 << 23;
+    static final int SCAN_AS_PREINSTALL = 1<<24;
+    static final int SCAN_AS_PREBUNDLED_DIR = 1<<25;
 
     @IntDef(flag = true, prefix = { "SCAN_" }, value = {
             SCAN_NO_DEX,
@@ -663,6 +679,12 @@ public class PackageManagerService extends IPackageManager.Stub
     private static final String PACKAGE_MIME_TYPE = "application/vnd.android.package-archive";
 
     private static final String PACKAGE_SCHEME = "package";
+
+    private static final String BUNDLED_PERSIST_DIR = "/odm/bundled_persist-app";
+
+    private static final String BUNDLED_UNINSTALL_GONE_DIR = "/odm/bundled_uninstall_gone-app";
+
+    private static final String DELETE_APK_FILE = "/cache/recovery/last_deleteApkFile.dat";
 
     /** Canonical intent used to identify what counts as a "web browser" app */
     private static final Intent sBrowserIntent;
@@ -3122,6 +3144,8 @@ public class PackageManagerService extends IPackageManager.Stub
                         packageParser, executorService);
             }
 
+            preinstallThirdPartyAPK(packageParser,executorService,scanFlags);
+
             // Parse overlay configuration files to set default enable state, mutability, and
             // priority of system overlays.
             mOverlayConfig = OverlayConfig.initializeSystemInstance(
@@ -3658,6 +3682,8 @@ public class PackageManagerService extends IPackageManager.Stub
         PackageParser.readConfigUseRoundIcon(mContext.getResources());
 
         mServiceStartWithDelay = SystemClock.uptimeMillis() + (60 * 1000L);
+
+        Slog.i(TAG, "Fix for b/169414761 is applied");
     }
 
     /**
@@ -7239,7 +7265,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     userId, intent);
             return result;
         }
-
+        
         // reader
         boolean sortResult = false;
         boolean addInstant = false;
@@ -7262,6 +7288,25 @@ public class PackageManagerService extends IPackageManager.Stub
                 // Check for results in the current profile.
                 result = filterIfNotSystemUser(mComponentResolver.queryActivities(
                         intent, resolvedType, flags, userId), userId);
+				
+				Set<String> categories  = intent.getCategories();
+				String[] hideAppArray = mContext.getResources().getStringArray(
+                R.array.config_hideApksinLauncher);
+				if (categories!= null && categories.contains(Intent.CATEGORY_LAUNCHER)
+        				&& result.size()>0 && !ArrayUtils.isEmpty(hideAppArray)){
+    				try {
+        				for (int i = result.size()-1;i>=0;i--){
+            				ResolveInfo r = result.get(i);
+            				//Log.v("sjfxx","r.activityInfo.packageName:"+r.activityInfo.packageName+","+ArrayUtils.contains(hideAppArray, r.activityInfo.packageName));
+            				if (ArrayUtils.contains(hideAppArray, r.activityInfo.packageName)){
+                				result.remove(r);
+            				}
+        				}
+    				} catch (Exception e){
+        				e.printStackTrace();
+    				}
+    			}
+
                 addInstant = isInstantAppResolutionAllowed(intent, result, userId,
                         false /*skipPackageCheck*/);
                 // Check for cross profile results.
@@ -9105,6 +9150,21 @@ public class PackageManagerService extends IPackageManager.Stub
                     + " flags=0x" + Integer.toHexString(parseFlags));
         }
 
+        ArrayList<String> list = new ArrayList<String>();
+        boolean isPrebundled = (parseFlags & PackageParser.PARSE_IS_PREBUNDLED_DIR) != 0;
+        if (isPrebundled) {
+            synchronized (mPackages) {
+                mSettings.readPrebundledPackagesLPr();
+            }
+        }
+
+        if (scanDir.getAbsolutePath().contains(BUNDLED_UNINSTALL_GONE_DIR)) {
+            if (!readDeleteFile(list)) {
+                Log.e(TAG, "read data failed");
+                return;
+            }
+        }
+
         ParallelPackageParser parallelPackageParser =
                 new ParallelPackageParser(packageParser, executorService);
 
@@ -9116,6 +9176,15 @@ public class PackageManagerService extends IPackageManager.Stub
             if (!isPackage) {
                 // Ignore entries which are not packages
                 continue;
+            }
+            if (file.getAbsolutePath().contains(BUNDLED_UNINSTALL_GONE_DIR)) {
+                if (list != null && list.size() > 0) {
+                    final boolean isdeleteApk = isDeleteApk(file,parseFlags,list);
+                    if (isdeleteApk) {
+                        // Ignore deleted bundled apps
+                        continue;
+                    }
+               }
             }
             parallelPackageParser.submit(file, parseFlags);
             fileCount++;
@@ -9136,6 +9205,17 @@ public class PackageManagerService extends IPackageManager.Stub
                 try {
                     addForInitLI(parseResult.parsedPackage, parseFlags, scanFlags,
                             currentTime, null);
+                    if (isPrebundled) {
+                        final PackageParser.Package pkg;
+                        try {
+                            pkg = new PackageParser().parsePackage(parseResult.scanFile, parseFlags);
+                        } catch (PackageParserException e) {
+                            throw PackageManagerException.from(e);
+                        }
+                        synchronized (mPackages) {
+                            mSettings.markPrebundledPackageInstalledLPr(pkg.packageName);
+                        }
+                    }
                 } catch (PackageManagerException e) {
                     errorCode = e.error;
                     Slog.w(TAG, "Failed to scan " + parseResult.scanFile + ": " + e.getMessage());
@@ -9160,6 +9240,12 @@ public class PackageManagerService extends IPackageManager.Stub
                 logCriticalInfo(Log.WARN,
                         "Deleting invalid package at " + parseResult.scanFile);
                 removeCodePathLI(parseResult.scanFile);
+            }
+        }
+
+        if (isPrebundled) {
+            synchronized (mPackages) {
+                mSettings.writePrebundledPackagesLPr();
             }
         }
     }
@@ -9340,6 +9426,31 @@ public class PackageManagerService extends IPackageManager.Stub
             @ParseFlags int parseFlags, @ScanFlags int scanFlags, long currentTime,
             @Nullable UserHandle user)
                     throws PackageManagerException {
+        if ((parseFlags & PackageParser.PARSE_IS_PREBUNDLED_DIR) != 0) {
+            synchronized (mPackages) {
+                PackageSetting existingSettings = mSettings.getPackageLPr(parsedPackage.getPackageName());
+                if (mSettings.wasPrebundledPackageInstalledLPr(parsedPackage.getPackageName()) &&
+                        existingSettings == null) {
+                    // The prebundled app was installed at some point in time, but now it is
+                    // gone.  Assume that the user uninstalled it intentionally: do not reinstall.
+                    throw new PackageManagerException(INSTALL_FAILED_UNINSTALLED_PREBUNDLE,
+                            "skip reinstall for " + parsedPackage.getPackageName());
+                } else if (existingSettings != null
+                        && existingSettings.versionCode >= parsedPackage.getVersionCode()
+                        && !existingSettings.codePathString.contains(
+                        Environment.getPrebundledUninstallBackDirectory().getPath())
+                        && !existingSettings.codePathString.contains(
+                        Environment.getPrebundledUninstallGoneDirectory().getPath())) {
+                    // This app is installed in a location that is not the prebundled location
+                    // and has a higher (or same) version as the prebundled one.  Skip
+                    // installing the prebundled version.
+                    Slog.d(TAG, parsedPackage.getPackageName() + " already installed at " +
+                            existingSettings.codePathString);
+                    return null; // return null so we still mark package as installed
+                }
+            }
+        }
+
         final boolean scanSystemPartition = (parseFlags & PackageParser.PARSE_IS_SYSTEM_DIR) != 0;
         final String renamedPkgName;
         final PackageSetting disabledPkgSetting;
@@ -9468,6 +9579,7 @@ public class PackageManagerService extends IPackageManager.Stub
         // cases, only data in Signing Block is verified instead of the whole file.
         // TODO(b/136132412): skip for Incremental installation
         final boolean skipVerify = scanSystemPartition
+                || ((parseFlags & PackageParser.PARSE_IS_PREBUNDLED_DIR) != 0)
                 || (forceCollect && canSkipForcedPackageVerification(parsedPackage));
         collectCertificatesLI(pkgSetting, parsedPackage, forceCollect, skipVerify);
 
@@ -11561,14 +11673,30 @@ public class PackageManagerService extends IPackageManager.Stub
 
         final String cpuAbiOverride = deriveAbiOverride(request.cpuAbiOverride, pkgSetting);
 
+        String forcePrimaryCpuAbi = "";
+        final File codeFile = new File(parsedPackage.getCodePath());
+        if ((!isApkFile(codeFile))
+            && ((scanFlags & SCAN_AS_PREBUNDLED_DIR) != 0
+                || (scanFlags & SCAN_AS_PREINSTALL) != 0)) {
+            File libDir64 = new File(codeFile, "lib/arm64");
+            if (null != libDir64 && libDir64.exists()) {
+                Slog.v(TAG, " libDir64=" + libDir64 + ", "+libDir64.getAbsolutePath());
+                forcePrimaryCpuAbi = "arm64-v8a";
+            } else {
+                forcePrimaryCpuAbi = "armeabi-v7a";
+            }
+            parsedPackage.setPrimaryCpuAbi(forcePrimaryCpuAbi);
+            Slog.w(TAG, parsedPackage.getPrimaryCpuAbi() + " prebundled install " + parsedPackage.getCodePath());
+        }
+
         if ((scanFlags & SCAN_NEW_INSTALL) == 0) {
-            if (needToDeriveAbi) {
+            if (needToDeriveAbi && (scanFlags & SCAN_AS_PREBUNDLED_DIR) == 0) {
                 Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "derivePackageAbi");
                 final boolean extractNativeLibs = !AndroidPackageUtils.isLibrary(parsedPackage);
                 final Pair<PackageAbiHelper.Abis, PackageAbiHelper.NativeLibraryPaths> derivedAbi =
                         packageAbiHelper.derivePackageAbi(parsedPackage,
                                 pkgSetting.getPkgState().isUpdatedSystemApp(), cpuAbiOverride,
-                                extractNativeLibs);
+                                extractNativeLibs, forcePrimaryCpuAbi);
                 derivedAbi.first.applyTo(parsedPackage);
                 derivedAbi.second.applyTo(parsedPackage);
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
@@ -11595,6 +11723,9 @@ public class PackageManagerService extends IPackageManager.Stub
                 // package setting.
                 parsedPackage.setPrimaryCpuAbi(primaryCpuAbiFromSettings)
                         .setSecondaryCpuAbi(secondaryCpuAbiFromSettings);
+                if (!"".equals(forcePrimaryCpuAbi)) {
+                    parsedPackage.setPrimaryCpuAbi(forcePrimaryCpuAbi);
+                }
 
                 final PackageAbiHelper.NativeLibraryPaths nativeLibraryPaths =
                         packageAbiHelper.getNativeLibraryPaths(parsedPackage,
@@ -11616,6 +11747,10 @@ public class PackageManagerService extends IPackageManager.Stub
                 // use that and derive the native library path based on the new codepath.
                 parsedPackage.setPrimaryCpuAbi(pkgSetting.primaryCpuAbiString)
                         .setSecondaryCpuAbi(pkgSetting.secondaryCpuAbiString);
+            }
+
+            if (!"".equals(forcePrimaryCpuAbi)) {
+                parsedPackage.setPrimaryCpuAbi(forcePrimaryCpuAbi);
             }
 
             // Set native library paths again. For moves, the path will be updated based on the
@@ -12231,7 +12366,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
             // If the package is not on a system partition ensure it is signed with at least the
             // minimum signature scheme version required for its target SDK.
-            if ((parseFlags & PackageParser.PARSE_IS_SYSTEM_DIR) == 0) {
+            if ((parseFlags & PackageParser.PARSE_IS_SYSTEM_DIR) == 0
+                    && (parseFlags & PackageParser.PARSE_IS_PREBUNDLED_DIR) == 0) {
                 int minSignatureSchemeVersion =
                         ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
                                 pkg.getTargetSdkVersion());
@@ -17579,7 +17715,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 final Pair<PackageAbiHelper.Abis, PackageAbiHelper.NativeLibraryPaths>
                         derivedAbi = mInjector.getAbiHelper().derivePackageAbi(parsedPackage,
                         isUpdatedSystemAppFromExistingSetting || isUpdatedSystemAppInferred,
-                        abiOverride, extractNativeLibs);
+                        abiOverride, extractNativeLibs, null);
                 derivedAbi.first.applyTo(parsedPackage);
                 derivedAbi.second.applyTo(parsedPackage);
             } catch (PackageManagerException pme) {
@@ -17803,6 +17939,18 @@ public class PackageManagerService extends IPackageManager.Stub
                 String pkgName1 = parsedPackage.getPackageName();
 
                 if (DEBUG_INSTALL) Slog.d(TAG, "installNewPackageLI: " + parsedPackage);
+
+                // For gts exoplayer & none odex app workaround
+                if (pkgName1.contains("com.google.android.exoplayer.gts")) {
+                    SystemProperties.set("cts_gts.exo.gts", "true");
+                } else if ("true".equals(SystemProperties.get("cts_gts.exo.gts"))) {
+                    SystemProperties.set("cts_gts.exo.gts", "");
+                }
+                if (pkgName1.contains("com.google.android.media.gts")) {
+                    SystemProperties.set("cts_gts.media.gts", "true");
+                } else if ("true".equals(SystemProperties.get("cts_gts.media.gts"))) {
+                    SystemProperties.set("cts_gts.media.gts", "");
+                }
 
                 // TODO(patb): MOVE TO RECONCILE
                 synchronized (mLock) {
@@ -19329,6 +19477,38 @@ public class PackageManagerService extends IPackageManager.Stub
             if (DEBUG_REMOVE) Slog.d(TAG, "Removing non-system package: " + ps.name);
             deleteInstalledPackageLIF(ps, deleteCodeAndResources, flags, allUserHandles,
                     outInfo, writeSettings);
+            if (ps.pkg.getCodePath().contains(BUNDLED_UNINSTALL_GONE_DIR)) {
+                File deleteApkFile = new File(DELETE_APK_FILE);
+                if(!deleteApkFile.exists()) {
+                    try {
+                        deleteApkFile.createNewFile();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        Slog.w (TAG,"create file failed: " + DELETE_APK_FILE);
+                        return;
+                    }
+                }
+                BufferedWriter fileWriter  = null;
+                try {
+                    fileWriter = new BufferedWriter(new FileWriter(deleteApkFile,true));
+                    fileWriter.append(ps.pkg.getPackageName());
+                    fileWriter.newLine();
+                    fileWriter.flush();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Slog.w(TAG,"write file failed: " + DELETE_APK_FILE);
+                } finally {
+                    if (fileWriter != null) {
+                        try {
+                            fileWriter.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                            return;
+                        }
+                        fileWriter = null;
+                    }
+                }
+            }
         }
 
         // If the package removed had SUSPEND_APPS, unset any restrictions that might have been in
@@ -19517,7 +19697,7 @@ public class PackageManagerService extends IPackageManager.Stub
             Slog.w(TAG, "Package named '" + packageName + "' doesn't exist.");
             return false;
         }
-        mPermissionManager.resetRuntimePermissions(pkg, userId);
+        //mPermissionManager.resetRuntimePermissions(pkg, userId);
 
         clearAppDataLIF(pkg, userId,
                 FLAG_STORAGE_DE | FLAG_STORAGE_CE | FLAG_STORAGE_EXTERNAL);
@@ -21907,6 +22087,8 @@ public class PackageManagerService extends IPackageManager.Stub
                     pw.println("Settings written.");
                     return;
                 }
+            } else if ("perf".equals(cmd)) {
+                dumpState.setDump(DumpState.DUMP_PERF_MODE);
             }
         }
 
@@ -22198,6 +22380,10 @@ public class PackageManagerService extends IPackageManager.Stub
                         }
                     }
                 }
+            }
+
+            if (dumpState.isDumping(DumpState.DUMP_PERF_MODE) && packageName == null) {
+                mSettings.dumpPackagePerformanceMode(pw, dumpState);
             }
 
             if (!checkin && dumpState.isDumping(DumpState.DUMP_FROZEN) && packageName == null) {
@@ -25644,6 +25830,18 @@ public class PackageManagerService extends IPackageManager.Stub
         return mProtectedPackages.isPackageStateProtected(userId, packageName);
     }
 
+    /**
+     * @hide
+     */
+    public int getPackagePerformanceMode(String pkgName) {
+        for (int i = 0; i < mSettings.mPerformancePackages.size(); i++) {
+            if (pkgName.toLowerCase().contains(mSettings.mPerformancePackages.get(i).name.toLowerCase())) {
+                return mSettings.mPerformancePackages.get(i).mode;
+            }
+        }
+        return PowerManager.PERFORMANCE_MODE_NORMAL;
+    }
+
     @Override
     public void sendDeviceCustomizationReadyBroadcast() {
         mContext.enforceCallingPermission(Manifest.permission.SEND_DEVICE_CUSTOMIZATION_READY,
@@ -25691,6 +25889,35 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     public List<String> getMimeGroup(String packageName, String mimeGroup) {
         return mSettings.mPackages.get(packageName).getMimeGroup(mimeGroup);
+    }
+
+    private void preinstallThirdPartyAPK(PackageParser2 packageParser, ExecutorService executorService,int scanFlags){
+        preinstallPrebundledpersist(packageParser,executorService,scanFlags);
+        preinstallPrebundledUninstallBack(packageParser,executorService,scanFlags);
+        preinstallPrebundledUninstallGone(packageParser,executorService,scanFlags);
+    }
+
+    private void preinstallPrebundledpersist(PackageParser2 packageParser, ExecutorService executorService,int scanFlags){
+        scanDirTracedLI(new File(BUNDLED_PERSIST_DIR),
+                    mDefParseFlags | PackageParser.PARSE_IS_SYSTEM_DIR
+                    | PackageParser.PARSE_IS_PREINSTALL,
+                    scanFlags | SCAN_AS_PREINSTALL
+                    | SCAN_AS_SYSTEM,
+                    0,packageParser, executorService);
+    }
+
+    private void preinstallPrebundledUninstallBack(PackageParser2 packageParser, ExecutorService executorService,int scanFlags){
+        scanDirTracedLI(Environment.getPrebundledUninstallBackDirectory(),
+                    mDefParseFlags | PackageParser.PARSE_IS_PREBUNDLED_DIR,
+                    scanFlags | SCAN_AS_PREBUNDLED_DIR,
+                    0,packageParser, executorService);
+    }
+
+    private void preinstallPrebundledUninstallGone(PackageParser2 packageParser, ExecutorService executorService,int scanFlags){
+        scanDirTracedLI(Environment.getPrebundledUninstallGoneDirectory(),
+                    mDefParseFlags | PackageParser.PARSE_IS_PREBUNDLED_DIR,
+                    scanFlags | SCAN_AS_PREBUNDLED_DIR,
+                    0,packageParser, executorService);
     }
 
     static class ActiveInstallSession {
@@ -25754,6 +25981,220 @@ public class PackageManagerService extends IPackageManager.Stub
         public SigningDetails getSigningDetails() {
             return mSigningDetails;
         }
+    }
+
+    private Map<String, Integer> mPackageUiModeConfigMap = new HashMap<String, Integer>();
+    private static String VENDOR_CONFIG = "/vendor/etc/package_uimode_config.xml";
+    private static String DATA_CONFIG = "/data/system/package_uimode_config.xml";
+
+    /**
+     * @hide
+     */
+    public void setPackageUiModeType(String packageName, int oldUiMode, int newUiMode) {
+        RandomAccessFile randomAccessFile = null;
+        try {
+            File configFilter = new File(DATA_CONFIG);
+            randomAccessFile = new RandomAccessFile(configFilter, "rw");
+            String line = null;
+            long lastPoint = 0;
+            StringBuilder totalStr = new StringBuilder();
+            while ((line = randomAccessFile.readLine()) != null) {
+                long point = randomAccessFile.getFilePointer();
+                if (line.contains(packageName) && line.contains(String.format("uiMode=\"%d\"", oldUiMode))) {
+                    String str = line.replace(String.format("uiMode=\"%d\"", oldUiMode), String.format("uiMode=\"%d\"", newUiMode));
+                    randomAccessFile.seek(lastPoint);
+                    randomAccessFile.writeBytes(str);
+                    totalStr.append(str);
+                    lastPoint = point;
+                    continue;
+                }
+                lastPoint = point;
+                totalStr.append(line);
+            }
+            if (!totalStr.toString().contains(packageName)) {
+                randomAccessFile.seek(lastPoint - 26);
+                randomAccessFile.writeBytes(String.format("    <app package=\"%s\" uiMode=\"%d\"/>\n</ui-mode-package-config>\n", packageName, newUiMode));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                if (randomAccessFile != null) {
+                    randomAccessFile.close();
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        File configFilter = new File(DATA_CONFIG);
+        if (configFilter.exists()) {
+            mPackageUiModeConfigMap.clear();
+            FileInputStream stream = null;
+            try {
+                stream = new FileInputStream(configFilter);
+                XmlPullParser xmlPullParser = Xml.newPullParser();
+                xmlPullParser.setInput(stream, null);
+                int type;
+                do {
+                    type = xmlPullParser.next();
+                    if (type == XmlPullParser.START_TAG) {
+                        String tag = xmlPullParser.getName();
+                        if (DEBUG_UIMODE) {
+                            Slog.d(TAG, "getConfigMap: tag = " + tag);
+                        }
+                        if ("app".equals(tag)) {
+                            String pkgName = xmlPullParser.getAttributeValue(null, "package");
+                            String uiMode = xmlPullParser.getAttributeValue(null, "uiMode");
+                            if (DEBUG_UIMODE) {
+                                Slog.d(TAG, "getConfigMap: pkgName = " + pkgName + ", uiMode = " + uiMode);
+                            }
+                            if (!TextUtils.isEmpty(pkgName) && !TextUtils.isEmpty(uiMode)) {
+                                int parseUiMode = Integer.parseInt(uiMode);
+                                mPackageUiModeConfigMap.put(pkgName, parseUiMode >= 0 ? parseUiMode : -1);
+                            }
+                        } else {
+                            if (DEBUG_UIMODE) {
+                                Slog.d(TAG, "getConfigMap: , tag != app");
+                            }
+                        }
+                    }
+                } while (type != XmlPullParser.END_DOCUMENT);
+            } catch (NullPointerException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (NumberFormatException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (XmlPullParserException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (IndexOutOfBoundsException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (IOException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } finally {
+                try {
+                    if (stream != null) {
+                        stream.close();
+                    }
+                } catch (IOException e) {
+                    Slog.w(TAG, "stream.close failed");
+                }
+            }
+        } else {
+            if (DEBUG_UIMODE) {
+                Slog.w(TAG, "package_uimode_config.xml is not exists");
+            }
+        }
+    }
+
+    /**
+     * @hide
+     */
+    public int getPackageUiModeType(String packageName) {
+        File configFilter = new File(DATA_CONFIG);
+        if (!configFilter.exists()) {
+            try {
+                int byteSum = 0;
+                int byteRead = 0;
+                File vendorFilter = new File(VENDOR_CONFIG);
+                configFilter.createNewFile();
+                if (vendorFilter.exists()) {
+                    InputStream inStream = new FileInputStream(vendorFilter);
+                    FileOutputStream fs = new FileOutputStream(configFilter);
+                    byte[] buffer = new byte[1024];
+                    int length;
+                    while ((byteRead = inStream.read(buffer)) != -1) {
+                        byteSum += byteRead;
+                        fs.write(buffer, 0, byteRead);
+                    }
+                    inStream.close();
+                    fs.close();
+                }
+                int result = android.os.FileUtils.setPermissions(configFilter, android.os.FileUtils.S_IRWXU | android.os.FileUtils.S_IRWXG | android.os.FileUtils.S_IRWXO, -1, -1);
+                if (DEBUG_UIMODE) {
+                    Slog.w(TAG, "chmod file result = " + result);
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        configFilter = new File(DATA_CONFIG);
+        if (mPackageUiModeConfigMap != null && mPackageUiModeConfigMap.size() <= 0 && configFilter.exists()) {
+            FileInputStream stream = null;
+            try {
+                stream = new FileInputStream(configFilter);
+                XmlPullParser xmlPullParser = Xml.newPullParser();
+                xmlPullParser.setInput(stream, null);
+                int type;
+                do {
+                    type = xmlPullParser.next();
+                    if (type == XmlPullParser.START_TAG) {
+                        String tag = xmlPullParser.getName();
+                        if (DEBUG_UIMODE) {
+                            Slog.d(TAG, "getConfigMap: tag = " + tag);
+                        }
+                        if ("app".equals(tag)) {
+                            String pkgName = xmlPullParser.getAttributeValue(null, "package");
+                            String uiMode = xmlPullParser.getAttributeValue(null, "uiMode");
+                            if (DEBUG_UIMODE) {
+                                Slog.d(TAG, "getConfigMap: pkgName = " + pkgName + ", uiMode = " + uiMode);
+                            }
+                            if (!TextUtils.isEmpty(pkgName) && !TextUtils.isEmpty(uiMode)) {
+                                int parseUiMode = Integer.parseInt(uiMode);
+                                mPackageUiModeConfigMap.put(pkgName, parseUiMode >= 0 ? parseUiMode : -1);
+                            }
+                        } else {
+                            if (DEBUG_UIMODE) {
+                                Slog.d(TAG, "getConfigMap: , tag != app");
+                            }
+                        }
+                    }
+                } while (type != XmlPullParser.END_DOCUMENT);
+            } catch (NullPointerException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (NumberFormatException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (XmlPullParserException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (IndexOutOfBoundsException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } catch (IOException e) {
+                Slog.w(TAG, "failed parsing " + configFilter, e);
+            } finally {
+                try {
+                    if (stream != null) {
+                        stream.close();
+                    }
+                } catch (IOException e) {
+                    Slog.w(TAG, "stream.close failed");
+                }
+            }
+        } else {
+            if (DEBUG_UIMODE) {
+                Slog.w(TAG, "package_uimode_config.xml is not exists or mPackageUiModeConfigMap > 0");
+            }
+        }
+
+        if (mPackageUiModeConfigMap != null && mPackageUiModeConfigMap.size() > 0) {
+            if (!TextUtils.isEmpty(packageName)) {
+                for (String pkgName : mPackageUiModeConfigMap.keySet()) {
+                    if (!TextUtils.isEmpty(pkgName) && packageName.equals(pkgName)) {
+                        Integer uiMode = mPackageUiModeConfigMap.get(packageName);
+                        if (uiMode != null && uiMode >= 0) {
+                            if (DEBUG_UIMODE) {
+                                Slog.d(TAG, "fix uiMode for app package = " + packageName + " , uiMode = " + uiMode.toString());
+                            }
+                            return uiMode;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
+                }
+            }
+        } else {
+            return -1;
+        }
+        return -1;
     }
 }
 

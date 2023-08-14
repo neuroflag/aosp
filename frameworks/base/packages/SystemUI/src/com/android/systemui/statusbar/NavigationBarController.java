@@ -102,6 +102,11 @@ public class NavigationBarController implements Callbacks {
         }
     }
 
+    private int mDisplayId;
+    public void hideDefaultNavigationBar() {
+         removeNavigationBar(mDisplayId);
+    }
+
     /**
      * Adds a navigation bar on default display or an external display if the display supports
      * system decorations.
@@ -155,6 +160,7 @@ public class NavigationBarController implements Callbacks {
             navBar.setAutoHideController(autoHideController);
             navBar.restoreAppearanceAndTransientState();
             mNavigationBars.append(displayId, navBar);
+            mDisplayId = displayId;
 
             if (result != null) {
                 navBar.setImeWindowStatus(display.getDisplayId(), result.mImeToken,
@@ -175,6 +181,13 @@ public class NavigationBarController implements Callbacks {
             // invoked after display removal.
             FragmentHostManager.removeAndDestroy(navigationWindow);
             mNavigationBars.remove(displayId);
+        }
+    }
+
+    public void hideNavigationBar() {
+        Display[] displays = mDisplayManager.getDisplays();
+        for (Display display : displays) {
+            removeNavigationBar(display.getDisplayId());
         }
     }
 

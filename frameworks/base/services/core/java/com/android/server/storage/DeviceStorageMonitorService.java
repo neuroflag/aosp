@@ -280,7 +280,8 @@ public class DeviceStorageMonitorService extends SystemService {
 
         // Ensure that the notification channel is set up
         PackageManager packageManager = context.getPackageManager();
-        boolean isTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+        boolean isTv = packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+                || packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION);
 
         if (isTv) {
             mNotifManager.createNotificationChannel(new NotificationChannel(

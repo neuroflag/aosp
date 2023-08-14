@@ -59,8 +59,11 @@ public class TimeoutPreferenceController extends AbstractPreferenceController im
     @Override
     public void updateState(Preference preference) {
         final TimeoutListPreference timeoutListPreference = (TimeoutListPreference) preference;
-        final long currentTimeout = Settings.System.getLong(mContext.getContentResolver(),
+        long currentTimeout = Settings.System.getLong(mContext.getContentResolver(),
                 SCREEN_OFF_TIMEOUT, FALLBACK_SCREEN_TIMEOUT_VALUE);
+        if (Integer.MAX_VALUE == currentTimeout) {
+            currentTimeout = 0;
+        }
         timeoutListPreference.setValue(String.valueOf(currentTimeout));
         final DevicePolicyManager dpm =
                 (DevicePolicyManager) mContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
@@ -86,6 +89,9 @@ public class TimeoutPreferenceController extends AbstractPreferenceController im
     public boolean onPreferenceChange(Preference preference, Object newValue) {
         try {
             int value = Integer.parseInt((String) newValue);
+            if (value == 0) {
+                value = Integer.MAX_VALUE;
+            }
             Settings.System.putInt(mContext.getContentResolver(), SCREEN_OFF_TIMEOUT, value);
             updateTimeoutPreferenceDescription((TimeoutListPreference) preference, value);
         } catch (NumberFormatException e) {
@@ -118,11 +124,17 @@ public class TimeoutPreferenceController extends AbstractPreferenceController im
         if (preference.isDisabledByAdmin()) {
             summary = mContext.getString(com.android.settings.R.string.disabled_by_policy_title);
         } else {
-            final CharSequence timeoutDescription = getTimeoutDescription(
-                    currentTimeout, entries, values);
-            summary = timeoutDescription == null
-                    ? ""
-                    : mContext.getString(R.string.screen_timeout_summary, timeoutDescription);
+            if (0 == currentTimeout || Integer.MAX_VALUE == currentTimeout) {
+                summary = preference.getContext().getResources().getStringArray(R.array.dream_timeout_entries)[0];
+            } else {
+                final CharSequence timeoutDescription = getTimeoutDescription(
+                        currentTimeout, entries, values);
+                if (timeoutDescription == null) {
+                    summary = "";
+                } else {
+                    summary = mContext.getString(R.string.screen_timeout_summary, timeoutDescription);
+                }
+            }
         }
         preference.setSummary(summary);
     }

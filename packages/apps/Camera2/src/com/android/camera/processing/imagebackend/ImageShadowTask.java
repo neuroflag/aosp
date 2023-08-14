@@ -94,17 +94,21 @@ class ImageShadowTask implements ProcessingTask {
 
     @Override
     public ProcessingResult process(Context context, CameraServices services, CaptureSession session) {
+        Log.d(TAG,"ImageShadowTask block");
         try {
             mProtocol.block();
         } catch (InterruptedException e) {
             // Exit cleanly on Interrupt.
             Log.w(TAG, "Image Shadow task Interrupted.");
         }
+        Log.d(TAG,"ImageShadowTask block exit");
 
         ProcessingResult finalResult = new ProcessingResult(true, mCaptureSession);
         // Always finishes alright.
         if (mDoneListener != null) {
+            Log.d(TAG, "mDoneListener start");
             mDoneListener.onDone(finalResult);
+            Log.d(TAG, "mDoneListener end");
         }
         return finalResult;
     }

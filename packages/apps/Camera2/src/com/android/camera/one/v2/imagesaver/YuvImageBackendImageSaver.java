@@ -22,6 +22,7 @@ import android.graphics.Rect;
 import android.net.Uri;
 
 import com.android.camera.app.OrientationManager;
+import com.android.camera.debug.Log;
 import com.android.camera.one.OneCamera;
 import com.android.camera.one.v2.camera2proxy.ImageProxy;
 import com.android.camera.one.v2.camera2proxy.TotalCaptureResultProxy;
@@ -75,6 +76,7 @@ public class YuvImageBackendImageSaver implements ImageSaver.Builder {
                 ListenableFuture<TotalCaptureResultProxy> metadata) {
             // TODO Use thumbnail to speedup RGB thumbnail creation whenever
             // possible.
+            Log.d(new Log.Tag("YuvImageBackendImageSaver"), "saveAndCloseImage");
             if (thumbnail.isPresent()) {
                 thumbnail.get().close();
             }

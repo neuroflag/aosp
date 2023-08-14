@@ -6,6 +6,7 @@
   coreApp="true"
   android:versionCode="300000000"
   android:versionName="30 system image"
+  android:sharedUserId="android.uid.system"
 >
 
     <original-package android:name="com.android.permissioncontroller" />
@@ -319,6 +320,16 @@
 
         <receiver android:name="com.android.permissioncontroller.incident.ApprovalReceiver"
             android:exported="false" />
+
+        <receiver android:name="com.android.permissioncontroller.TemporaryFileManager"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <service android:name="com.android.permissioncontroller.PackageChangedService"
+          android:exported="false"/>
 
     </application>
 

@@ -858,6 +858,7 @@ public class TelecomAccountRegistry {
                         mPhone.getServiceStateTracker().getLocaleTracker()
                                 .getLastKnownCountryIso().toLowerCase();
 
+                mLastKnownNetworkCountry = country;
                 String[] supportedCountries = mContext.getResources().getStringArray(
                         R.array.config_simless_emergency_rtt_supported_countries);
                 if (supportedCountries == null || Arrays.stream(supportedCountries).noneMatch(
@@ -1044,12 +1045,29 @@ public class TelecomAccountRegistry {
         }
     };
 
+    private String mLastKnownNetworkCountry = "";
     private BroadcastReceiver mLocaleChangeReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            Log.i(this, "Locale change; re-registering phone accounts.");
-            tearDownAccounts();
-            setupAccounts();
+            //Log.i(this, "Locale change; re-registering phone accounts.");
+            //tearDownAccounts();
+            //setupAccounts();
+            String action = intent.getAction();
+            Log.i(this, "Locale change; re-registering phone accounts. action:" + action);
+            if (action.equals(Intent.ACTION_LOCALE_CHANGED)) {
+                tearDownAccounts();
+                setupAccounts();
+            } else if (action.equals(TelephonyManager.ACTION_NETWORK_COUNTRY_CHANGED)) {
+                String networkCountry = intent.getStringExtra(
+                        TelephonyManager.EXTRA_NETWORK_COUNTRY);
+                String lastKnownNetworkCountry = intent.getStringExtra(
+                        TelephonyManager.EXTRA_LAST_KNOWN_NETWORK_COUNTRY);
+                Log.i(this, "networkCountry:"+networkCountry+",lastKnownNetworkCountry:"+lastKnownNetworkCountry);
+                if ( !TextUtils.isEmpty(lastKnownNetworkCountry) && !mLastKnownNetworkCountry.equals(lastKnownNetworkCountry)) {
+                    tearDownAccounts();
+                    setupAccounts();
+                }
+            }
         }
     };
 

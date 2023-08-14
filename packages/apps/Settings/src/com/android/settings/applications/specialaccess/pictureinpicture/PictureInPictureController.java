@@ -19,6 +19,7 @@ package com.android.settings.applications.specialaccess.pictureinpicture;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.os.SystemProperties;
 
 import com.android.settings.core.BasePreferenceController;
 
@@ -30,7 +31,8 @@ public class PictureInPictureController extends BasePreferenceController {
 
     @Override
     public int getAvailabilityStatus() {
-        return !ActivityManager.isLowRamDeviceStatic()
+        boolean isEbook = SystemProperties.getBoolean("ro.vendor.eink", false);
+        return (!ActivityManager.isLowRamDeviceStatic() || isEbook)
                 && mContext.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_PICTURE_IN_PICTURE) ? AVAILABLE : UNSUPPORTED_ON_DEVICE;
     }

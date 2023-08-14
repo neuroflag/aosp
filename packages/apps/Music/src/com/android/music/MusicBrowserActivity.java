@@ -16,22 +16,91 @@
 
 package com.android.music;
 
-import android.app.Activity;
-import android.os.Bundle;
+import android.Manifest.permission;
+import android.content.pm.PackageManager;
+import com.android.music.MusicUtils.ServiceToken;
 
-/**
- * A skeleton class that provides empty implementations for Activity class.
- */
-public class MusicBrowserActivity extends Activity {
+import android.app.Activity;
+import android.content.ComponentName;
+import android.content.ServiceConnection;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.RemoteException;
+
+public class MusicBrowserActivity extends Activity implements MusicUtils.Defs {
+    private ServiceToken mToken;
+    private static final int MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE = 42;
+
     public MusicBrowserActivity() {}
 
+    /**
+     * Called when the activity is first created.
+     */
     @Override
-    public void onCreate(Bundle icicle) {}
+    public void onCreate(Bundle icicle) {
+        super.onCreate(icicle);
+        if (checkSelfPermission(permission.READ_EXTERNAL_STORAGE)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[] {permission.READ_EXTERNAL_STORAGE},
+                    MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE);
+            return;
+        }
+        initApp();
+    }
+
+    public void initApp() {
+        int activeTab = MusicUtils.getIntPref(this, "activetab", R.id.albumtab);
+        if (activeTab != R.id.artisttab && activeTab != R.id.albumtab && activeTab != R.id.songtab
+                && activeTab != R.id.playlisttab) {
+            activeTab = R.id.albumtab;
+        }
+        MusicUtils.activateTab(this, activeTab);
+
+        String shuf = getIntent().getStringExtra("autoshuffle");
+        if ("true".equals(shuf)) {
+            mToken = MusicUtils.bindToService(this, autoshuffle);
+        }
+    }
 
     @Override
-    public void onDestroy() {}
+    public void onDestroy() {
+        if (mToken != null) {
+            MusicUtils.unbindFromService(mToken);
+        }
+        super.onDestroy();
+    }
+
+    private ServiceConnection autoshuffle = new ServiceConnection() {
+        public void onServiceConnected(ComponentName classname, IBinder obj) {
+            // we need to be able to bind again, so unbind
+            try {
+                unbindService(this);
+            } catch (IllegalArgumentException e) {
+            }
+            IMediaPlaybackService serv = IMediaPlaybackService.Stub.asInterface(obj);
+            if (serv != null) {
+                try {
+                    serv.setShuffleMode(MediaPlaybackService.SHUFFLE_AUTO);
+                } catch (RemoteException ex) {
+                }
+            }
+        }
+
+        public void onServiceDisconnected(ComponentName classname) {}
+    };
 
     @Override
     public void onRequestPermissionsResult(
-            int requestCode, String permissions[], int[] grantResults) {}
+            int requestCode, String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case MY_PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE: {
+                if (grantResults.length == 0
+                        || grantResults[0] != PackageManager.PERMISSION_GRANTED) {
+                    finish();
+                    return;
+                }
+                initApp();
+            }
+        }
+    }
 }

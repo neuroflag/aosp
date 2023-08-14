@@ -45,7 +45,16 @@ import java.util.Locale;
 
 
 class LocaleDragAndDropAdapter
-        extends RecyclerView.Adapter<LocaleDragAndDropAdapter.CustomViewHolder> {
+        extends RecyclerView.Adapter<LocaleDragAndDropAdapter.CustomViewHolder> implements View.OnClickListener{
+
+    public static interface OnItemClickListener {
+        void onItemClick(View view , int position);
+    }
+
+    private OnItemClickListener mOnItemClickListener = null;
+    public void setOnItemClickListener(OnItemClickListener listener) {
+        this.mOnItemClickListener = listener;
+    }
 
     private static final String TAG = "LocaleDragAndDropAdapter";
     private static final String CFGKEY_SELECTED_LOCALES = "selectedLocales";
@@ -145,8 +154,18 @@ class LocaleDragAndDropAdapter
     public CustomViewHolder onCreateViewHolder(ViewGroup viewGroup, int i) {
         final LocaleDragCell item = (LocaleDragCell) LayoutInflater.from(mContext)
                 .inflate(R.layout.locale_drag_cell, viewGroup, false);
+
+        item.setOnClickListener(this);
         return new CustomViewHolder(item);
     }
+
+     @Override
+    public void onClick(View v) {
+        if (mOnItemClickListener != null) {
+            mOnItemClickListener.onItemClick(v,(int)(v.getTag(R.id.tag_index)));
+        }
+    }
+
 
     @Override
     public void onBindViewHolder(final CustomViewHolder holder, int i) {
@@ -160,7 +179,8 @@ class LocaleDragAndDropAdapter
         dragCell.setShowCheckbox(mRemoveMode);
         dragCell.setShowMiniLabel(!mRemoveMode);
         dragCell.setShowHandle(!mRemoveMode && mDragEnabled);
-        dragCell.setTag(feedItem);
+        dragCell.setTag(R.id.tag_feeditem,feedItem);
+        dragCell.setTag(R.id.tag_index, i);
         CheckBox checkbox = dragCell.getCheckbox();
         // clear listener before setChecked() in case another item already bind to
         // current ViewHolder and checked event is triggered on stale listener mistakenly.
@@ -170,7 +190,7 @@ class LocaleDragAndDropAdapter
                     @Override
                     public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                         LocaleStore.LocaleInfo feedItem =
-                                (LocaleStore.LocaleInfo) dragCell.getTag();
+                                (LocaleStore.LocaleInfo) dragCell.getTag(R.id.tag_feeditem);
                         feedItem.setChecked(isChecked);
                     }
                 });

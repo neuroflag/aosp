@@ -37,8 +37,6 @@
 #include "common.h"
 #include "cpp_bindings.h"
 
-/* test mode flag for halutil only */
-bool halutil_mode = false;
 interface_info *getIfaceInfo(wifi_interface_handle handle)
 {
     return (interface_info *)handle;
@@ -263,11 +261,24 @@ wifi_error wifi_cancel_cmd(wifi_request_id id, wifi_interface_handle iface)
     return WIFI_ERROR_INVALID_ARGS;
 }
 
-void set_hautil_mode(bool util_mode)
+static char wifi_type[64] = {0};
+extern "C" int check_wifi_chip_type_string(char *type);
+int check_wifi_chip_type()
 {
-    halutil_mode = util_mode;
+	int type;
+	if (wifi_type[0] == 0) {
+		check_wifi_chip_type_string(wifi_type);
+		ALOGE("WIFI_TYPE = %s\n",wifi_type);
+	}
+	if (0 == strncmp(wifi_type, "RTL", 3)) {
+		type = REALTEK_WIFI;
+	} else if (0 == strncmp(wifi_type, "SSV", 3)) {
+		type = SSV_WIFI;
+	} else if (0 == strncmp(wifi_type, "RK912", 3)) {
+		type = RK912_WIFI;
+	} else {
+		type = BROADCOM_WIFI;
+	}
+	return type;
 }
-bool get_halutil_mode()
-{
-    return halutil_mode;
-}
+

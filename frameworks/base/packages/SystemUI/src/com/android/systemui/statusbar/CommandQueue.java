@@ -127,6 +127,9 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     private static final int MSG_TRACING_STATE_CHANGED             = 55 << MSG_SHIFT;
     private static final int MSG_SUPPRESS_AMBIENT_DISPLAY          = 56 << MSG_SHIFT;
 
+    /**firefly_modify_songjf, add bar interface**/
+    private static final int MSG_ADD_BAR    = 57 << MSG_SHIFT;
+
     public static final int FLAG_EXCLUDE_NONE = 0;
     public static final int FLAG_EXCLUDE_SEARCH_PANEL = 1 << 0;
     public static final int FLAG_EXCLUDE_RECENTS_PANEL = 1 << 1;
@@ -255,6 +258,9 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         default void showPinningEscapeToast() { }
         default void handleShowGlobalActionsMenu() { }
         default void handleShowShutdownUi(boolean isReboot, String reason) { }
+
+	/**firefly_modify_songjf, add bar interface **/
+        default void addBar(){ }
 
         default void showWirelessChargingAnimation(int batteryLevel) {  }
 
@@ -611,6 +617,14 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
         synchronized (mLock) {
             // don't coalesce these
             mHandler.obtainMessage(MSG_SET_WINDOW_STATE, displayId, window, state).sendToTarget();
+        }
+    }
+
+    /**firefly_modify_songjf, add bar interface **/
+    public void addBar() {
+        synchronized (mLock) {
+            mHandler.removeMessages(MSG_ADD_BAR);
+            mHandler.obtainMessage(MSG_ADD_BAR, 0, 0, null).sendToTarget();
         }
     }
 
@@ -1304,6 +1318,13 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                 case MSG_SUPPRESS_AMBIENT_DISPLAY:
                     for (Callbacks callbacks: mCallbacks) {
                         callbacks.suppressAmbientDisplay((boolean) msg.obj);
+                    }
+                    break;
+
+                /**firefly_modify_songjf, add bar interface **/
+                case MSG_ADD_BAR:
+                    for (int i = 0; i < mCallbacks.size(); i++) {
+                        mCallbacks.get(i).addBar();
                     }
                     break;
             }

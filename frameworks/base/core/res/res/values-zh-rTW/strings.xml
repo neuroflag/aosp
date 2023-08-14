@@ -1507,12 +1507,15 @@
     <string name="action_menu_overflow_description" msgid="4579536843510088170">"更多選項"</string>
     <string name="action_bar_home_description_format" msgid="5087107531331621803">"%1$s：%2$s"</string>
     <string name="action_bar_home_subtitle_description_format" msgid="4346835454749569826">"%1$s - %2$s：%3$s"</string>
-    <string name="storage_internal" msgid="8490227947584914460">"內部共用儲存空間"</string>
+    <string name="storage_internal" msgid="8490227947584914460">"內部儲存空間"</string>
     <string name="storage_sd_card" msgid="3404740277075331881">"SD 卡"</string>
     <string name="storage_sd_card_label" msgid="7526153141147470509">"<xliff:g id="MANUFACTURER">%s</xliff:g> SD 卡"</string>
     <string name="storage_usb_drive" msgid="448030813201444573">"USB 隨身碟"</string>
     <string name="storage_usb_drive_label" msgid="6631740655876540521">"<xliff:g id="MANUFACTURER">%s</xliff:g> USB 隨身碟"</string>
     <string name="storage_usb" msgid="2391213347883616886">"USB 儲存裝置"</string>
+    <string name="storage_pcie_drive">M.2 SSD</string>
+    <string name="storage_harddisk_drive">硬碟</string>
+    <string name="storage_shareblock_drive">共享分區</string>
     <string name="extract_edit_menu_button" msgid="63954536535863040">"編輯"</string>
     <string name="data_usage_warning_title" msgid="9034893717078325845">"數據用量警告"</string>
     <string name="data_usage_warning_body" msgid="1669325367188029454">"你的數據用量已達 <xliff:g id="APP">%s</xliff:g>"</string>

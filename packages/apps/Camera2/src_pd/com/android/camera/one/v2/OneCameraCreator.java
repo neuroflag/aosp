@@ -124,6 +124,7 @@ public class OneCameraCreator {
                 configuration.getNativeOutputSize(),
                 imageSaverBuilder,
                 captureSetting.getFlashSetting(),
+                captureSetting.getWhiteBalanceSetting(),
                 captureSetting.getExposureSetting(),
                 captureSetting.getHdrSceneSetting(),
                 burstController,

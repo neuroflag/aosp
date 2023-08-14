@@ -1602,6 +1602,7 @@
     <string name="reset_network_confirm_title" msgid="913014422184481270">"Want to reset?"</string>
     <string name="network_reset_not_available" msgid="1966334631394607829">"Network reset is not available for this user"</string>
     <string name="reset_network_complete_toast" msgid="1367872474130621115">"Network settings have been reset"</string>
+    <string name="ethernet_settings_title">"Ehernet"</string>
     <string name="reset_esim_error_title" msgid="4670073610967959597">"Can’t delete SIMs"</string>
     <string name="reset_esim_error_msg" msgid="4441504470684307370">"Downloaded SIMs can’t be deleted due to an error.\n\nRestart your device and try again."</string>
     <string name="master_clear_title" msgid="5309249309235959383">"Delete all data (factory reset)"</string>

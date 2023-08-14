@@ -256,6 +256,7 @@ cc_library_shared {
                 "libvintf",
                 "libnativedisplay",
                 "libnativewindow",
+                "libhwui",
                 "libdl",
                 "libdl_android",
                 "libstatslog",
@@ -270,6 +271,9 @@ cc_library_shared {
 
                 // our headers include libnativewindow's public headers
                 "libnativewindow",
+
+                // GraphicsJNI.h includes hwui headers
+                "libhwui",
             ],
             header_libs: [
                 "bionic_libc_platform_headers",

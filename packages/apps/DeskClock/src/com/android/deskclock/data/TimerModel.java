@@ -803,6 +803,8 @@ final class TimerModel {
         // Otherwise build and post a foreground notification reflecting the latest expired timers.
         final Notification notification = mNotificationBuilder.buildHeadsUp(mContext, expired);
         final int notificationId = mNotificationModel.getExpiredTimerNotificationId();
+        // channel maybe not create because app not in background sometime,so build again
+        mNotificationBuilder.buildChannel(mContext, mNotificationManager);
         mService.startForeground(notificationId, notification);
     }
 

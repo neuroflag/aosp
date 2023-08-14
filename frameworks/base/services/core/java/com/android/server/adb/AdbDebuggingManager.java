@@ -654,7 +654,8 @@ public class AdbDebuggingManager {
         private static final String ADB_NOTIFICATION_CHANNEL_ID_TV = "usbdevicemanager.adb.tv";
 
         private boolean isTv() {
-            return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+            return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+                || mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION);
         }
 
         private void setupNotifications() {

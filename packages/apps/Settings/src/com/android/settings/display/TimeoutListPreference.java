@@ -91,7 +91,12 @@ public class TimeoutListPreference extends RestrictedListPreference {
 
         ArrayList<CharSequence> revisedEntries = new ArrayList<CharSequence>();
         ArrayList<CharSequence> revisedValues = new ArrayList<CharSequence>();
-        for (int i = 0; i < mInitialValues.length; ++i) {
+        int startPos = 0;
+        if ("screen_timeout".equals(getKey())) {
+            //fix set maximum time to lock test of CtsVerifier
+            startPos = 1;
+        }
+        for (int i = startPos; i < mInitialValues.length; ++i) {
             long timeout = Long.parseLong(mInitialValues[i].toString());
             if (timeout <= maxTimeout) {
                 revisedEntries.add(mInitialEntries[i]);

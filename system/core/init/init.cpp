@@ -421,7 +421,9 @@ static bool HandleControlMessage(std::string_view message, const std::string& na
         return false;
     }
 
-    LOG(INFO) << "Control message: Processed ctl." << message << " for '" << name
+    // firefly for shield android.hardware.radio@1.1 log print when no 4G/5G module
+    if(strcmp(name.c_str(),"android.hardware.radio@1.1::IRadio/slot1") != 0)
+        LOG(INFO) << "Control message: Processed ctl." << message << " for '" << name
               << "' from pid: " << from_pid << " (" << process_cmdline << ")";
     return true;
 }

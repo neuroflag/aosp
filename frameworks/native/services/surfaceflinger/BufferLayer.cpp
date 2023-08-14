@@ -261,6 +261,8 @@ std::optional<compositionengine::LayerFE::LayerSettings> BufferLayer::prepareCli
             mat4::translate(vec4(-.5, -.5, 0, 1)) *
             mat4::translate(vec4(translateX, translateY, 0, 1)) *
             mat4::scale(vec4(scaleWidth, scaleHeight, 1.0, 1.0));
+    //rk_ext: Deliver to GLESRenderEngine for 10bit to 8bit
+    layer.source.buffer.currentcrop = mBufferInfo.mCrop;
 
     layer.source.buffer.useTextureFiltering = useFiltering;
     layer.source.buffer.textureTransform = mat4(static_cast<const float*>(textureMatrix)) * tr;
@@ -546,7 +548,8 @@ bool BufferLayer::latchUnsignaledBuffers() {
     std::lock_guard<std::mutex> lock(mutex);
     if (!propertyLoaded) {
         char value[PROPERTY_VALUE_MAX] = {};
-        property_get("debug.sf.latch_unsignaled", value, "0");
+        //Google default 0, but rk changed. acquireFence will be waited before vop refresh.
+        property_get("debug.sf.latch_unsignaled", value, "1");
         latch = atoi(value);
         propertyLoaded = true;
     }

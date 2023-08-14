@@ -21,6 +21,7 @@ import android.hardware.camera2.CameraAccessException;
 import com.android.camera.async.ConcurrentState;
 import com.android.camera.async.Observable;
 import com.android.camera.async.SafeCloseable;
+import com.android.camera.debug.Log;
 import com.android.camera.one.v2.camera2proxy.CameraCaptureSessionClosedException;
 
 import java.util.List;
@@ -47,6 +48,8 @@ final class ObservableFrameServer implements FrameServer, Observable<Boolean> {
     private final AtomicInteger mClientCount;
     private final ConcurrentState<Boolean> mAvailability;
     private final FrameServer mDelegate;
+    
+    private final Log.Tag TAG = new Log.Tag("ObservableFrameServer");
 
     private class SessionImpl implements Session {
         private final AtomicBoolean mClosed;
@@ -61,6 +64,7 @@ final class ObservableFrameServer implements FrameServer, Observable<Boolean> {
         public void submitRequest(List<Request> burstRequests, RequestType type)
                 throws CameraAccessException, InterruptedException,
                 CameraCaptureSessionClosedException, ResourceAcquisitionFailedException {
+            Log.d(TAG, "submitRequest type:" + type.name());
             mDelegate.submitRequest(burstRequests, type);
         }
 

@@ -28,6 +28,7 @@ import android.animation.AnimatorSet;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -158,6 +159,13 @@ public class AnimatorPlaybackController implements ValueAnimator.AnimatorUpdateL
 
         long springDuration = animationDuration;
         for (Holder h : mChildAnimations) {
+            //Log.d("dzy",h.anim.toString());
+            if(h.anim.getAnimatedValue("translationY")!=null) {
+                //Log.d("dzy", h.anim.getAnimatedValue("translationY").toString());
+                if((float)h.anim.getAnimatedValue("translationY")==0){
+                    continue;
+                }
+            }
             if ((h.springProperty.flags & springFlag) != 0) {
                 SpringAnimationBuilder s = new SpringAnimationBuilder(context)
                         .setStartValue(mCurrentFraction)

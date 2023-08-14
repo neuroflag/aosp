@@ -40,6 +40,7 @@ import com.android.settingslib.bluetooth.PbapServerProfile;
 import com.android.settingslib.core.lifecycle.Lifecycle;
 
 import java.util.List;
+import android.util.Log;
 
 /**
  * This class adds switches for toggling the individual profiles that a Bluetooth device
@@ -270,6 +271,8 @@ public class BluetoothDetailsProfilesController extends BluetoothDetailsControll
     @Override
     protected void refresh() {
         for (LocalBluetoothProfile profile : getProfiles()) {
+            Log.i("ProfilesController","refresh pofile :"+profile);
+            if(profile==null)break;
             if (!profile.isProfileReady()) {
                 continue;
             }

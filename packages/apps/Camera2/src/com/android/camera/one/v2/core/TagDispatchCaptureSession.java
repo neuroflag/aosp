@@ -24,6 +24,7 @@ import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.os.Handler;
 
+import com.android.camera.debug.Log;
 import com.android.camera.one.v2.camera2proxy.CameraCaptureSessionClosedException;
 import com.android.camera.one.v2.camera2proxy.CameraCaptureSessionProxy;
 import com.android.camera.one.v2.camera2proxy.CaptureRequestBuilderProxy;
@@ -42,6 +43,7 @@ import java.util.Map;
  */
 @VisibleForTesting
 public class TagDispatchCaptureSession implements FrameServer.Session {
+    private final Log.Tag TAG = new Log.Tag("TagDispatchCaptureSession");
     private static class CaptureCallback implements CameraCaptureSessionProxy.CaptureCallback {
         private final Map<Object, ResponseListener> mListeners;
 
@@ -137,7 +139,7 @@ public class TagDispatchCaptureSession implements FrameServer.Session {
         try {
             Map<Object, ResponseListener> tagListenerMap = new HashMap<Object, ResponseListener>();
             List<CaptureRequest> captureRequests = new ArrayList<>(burstRequests.size());
-
+            Log.d(TAG, "submitRequest list:" + burstRequests.size());
             for (Request request : burstRequests) {
                 Object tag = generateTag();
 

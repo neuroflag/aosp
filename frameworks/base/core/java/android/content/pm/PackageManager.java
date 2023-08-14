@@ -1582,6 +1582,14 @@ public abstract class PackageManager {
      */
     public static final int INSTALL_PARSE_FAILED_SKIPPED = -125;
 
+    /**
+     * Used for prebundles
+     * Installation failed for a prebundled app because the user previously uninstalled it
+     * and we don't want to bring it back
+     * @hide
+     */
+    public static final int INSTALL_FAILED_UNINSTALLED_PREBUNDLE = -403;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "DELETE_" }, value = {
             DELETE_KEEP_DATA,
@@ -7954,6 +7962,11 @@ public abstract class PackageManager {
     }
 
     /**
+     * @hide
+     */
+    public abstract int getPackagePerformanceMode(String pkgName);
+
+    /**
      * Notify to the rest of the system that a new device configuration has
      * been prepared and that it is time to refresh caches.
      *
@@ -8245,4 +8258,14 @@ public abstract class PackageManager {
     public static void uncorkPackageInfoCache() {
         PropertyInvalidatedCache.uncorkInvalidations(PermissionManager.CACHE_KEY_PACKAGE_INFO);
     }
+
+    /**
+     * @hide
+     */
+    public abstract void setPackageUiModeType(String packageName, int oldUiMode, int newUiMode);
+
+    /**
+     * @hide
+     */
+    public abstract int getPackageUiModeType(String packageName);
 }

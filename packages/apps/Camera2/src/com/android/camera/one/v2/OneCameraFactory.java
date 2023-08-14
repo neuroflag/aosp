@@ -35,6 +35,7 @@ public interface OneCameraFactory {
             Size pictureSize,
             ImageSaver.Builder imageSaverBuilder,
             Observable<OneCamera.PhotoCaptureParameters.Flash> flashSetting,
+            Observable<OneCamera.PhotoCaptureParameters.WhiteBalance> wbSetting,
             Observable<Integer> exposureSetting,
             Observable<Boolean> hdrSceneSetting,
             BurstFacade burstController,

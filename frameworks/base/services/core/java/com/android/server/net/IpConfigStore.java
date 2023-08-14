@@ -41,6 +41,14 @@ import java.io.InputStream;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 
+import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+
+
 public class IpConfigStore {
     private static final String TAG = "IpConfigStore";
     private static final boolean DBG = false;
@@ -168,7 +176,7 @@ public class IpConfigStore {
             loge("Failure in writing " + config + e);
         }
         out.writeUTF(EOS);
-
+        out.flush();
         return written;
     }
 
@@ -195,8 +203,31 @@ public class IpConfigStore {
             for(int i = 0; i < networks.size(); i++) {
                 writeConfig(out, networks.keyAt(i), networks.valueAt(i));
             }
+
+            try{
+                sync(filePath);
+            }catch (IOException e){
+                Log.v(TAG,"2 sync error:"+e.toString());
+            }
         });
     }
+
+    public void sync(String filepath) throws IOException {
+        File f = new File(filepath);
+        RandomAccessFile raf = null;
+
+        try {
+            raf = new RandomAccessFile(f, "r");
+            FileDescriptor fd = raf.getFD();
+            fd.sync();
+
+        } finally {
+            if (raf != null) {
+                raf.close();
+            }
+        }
+    }
+
 
     public static ArrayMap<String, IpConfiguration> readIpConfigurations(String filePath) {
         BufferedInputStream bufferedInputStream;
@@ -255,7 +286,7 @@ public class IpConfigStore {
             int version = in.readInt();
             if (version != 3 && version != 2 && version != 1) {
                 loge("Bad version on IP configuration file, ignore read");
-                return null;
+                return new ArrayMap<>(0);
             }
 
             while (true) {

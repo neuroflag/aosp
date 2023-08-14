@@ -363,7 +363,12 @@ public final class BatteryService extends SystemService {
 
     private boolean shouldShutdownLocked() {
         if (mHealthInfo2p1.batteryCapacityLevel != BatteryCapacityLevel.UNSUPPORTED) {
-            return (mHealthInfo2p1.batteryCapacityLevel == BatteryCapacityLevel.CRITICAL);
+            if (mHealthInfo2p1.batteryCapacityLevel == BatteryCapacityLevel.CRITICAL) {
+                Slog.w(TAG, "batteryCapacityLevel is CRITICAL need Shutdown");
+                return true;
+            } else if (mHealthInfo2p1.batteryCapacityLevel != BatteryCapacityLevel.LOW) {
+                return false;
+            }
         }
         if (mHealthInfo.batteryLevel > 0) {
             return false;
@@ -378,7 +383,15 @@ public final class BatteryService extends SystemService {
         // - If battery present and state == unknown, this is an unexpected error state.
         // - If level <= 0 and state == full, this is also an unexpected state
         // - All other states (NOT_CHARGING, DISCHARGING) means it is not charging.
-        return mHealthInfo.batteryStatus != BatteryManager.BATTERY_STATUS_CHARGING;
+        boolean isNotCharging = mHealthInfo.batteryStatus != BatteryManager.BATTERY_STATUS_CHARGING;
+        if (isNotCharging) {
+            return true;
+        }
+        boolean isExcessDischarge = mHealthInfo.batteryCurrent < 0;
+        if (isExcessDischarge) {
+            Slog.w(TAG, "batteryCurrent=" + mHealthInfo.batteryCurrent + ", isExcessDischarge need Shutdown");
+        }
+        return isExcessDischarge;
     }
 
     private void shutdownIfNoPowerLocked() {
@@ -1027,6 +1040,7 @@ public final class BatteryService extends SystemService {
                 pw.println("  level: " + mHealthInfo.batteryLevel);
                 pw.println("  scale: " + BATTERY_SCALE);
                 pw.println("  voltage: " + mHealthInfo.batteryVoltage);
+                pw.println("  current: " + mHealthInfo.batteryCurrent);
                 pw.println("  temperature: " + mHealthInfo.batteryTemperature);
                 pw.println("  technology: " + mHealthInfo.batteryTechnology);
             } else {

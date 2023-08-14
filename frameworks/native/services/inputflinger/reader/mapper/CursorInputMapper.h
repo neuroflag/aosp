@@ -72,6 +72,8 @@ private:
     // Amount that trackball needs to move in order to generate a key event.
     static const int32_t TRACKBALL_MOVEMENT_THRESHOLD = 6;
 
+    bool isMouseToTouch;
+    
     // Immutable configuration parameters.
     struct Parameters {
         enum Mode {
@@ -97,6 +99,8 @@ private:
 
     float mVWheelScale;
     float mHWheelScale;
+
+    int32_t mDisplayId;
 
     // Velocity controls for mouse pointer and wheel movements.
     // The controls for X and Y wheel movements are separate to keep them decoupled.

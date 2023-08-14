@@ -48,7 +48,13 @@ import javax.annotation.Nonnull;
 public class Storage {
     public static final String DCIM =
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).toString();
-    public static final String DIRECTORY = DCIM + "/Camera";
+    public static String DIRECTORY = DCIM + "/Camera";
+    public static final String FLASH_DIR = Environment.getExternalStorageDirectory().getPath();
+    public static String EXTENAL_SD = "/";
+    public static String EXTERNAL_DIRECTORY = EXTENAL_SD
+            + "/" + Environment.DIRECTORY_DCIM
+            + "/Camera";
+    public static final String DEFAULT_DIRECTORY = DCIM + "/Camera";
     public static final File DIRECTORY_FILE = new File(DIRECTORY);
     public static final String JPEG_POSTFIX = ".jpg";
     public static final String GIF_POSTFIX = ".gif";
@@ -156,7 +162,9 @@ public class Storage {
 
         Uri uri = null;
         try {
+            Log.d(TAG, "resolver.insert start");
             uri = resolver.insert(Images.Media.EXTERNAL_CONTENT_URI, values);
+            Log.d(TAG, "resolver.insert end");
         } catch (Throwable th)  {
             // This can happen when the external volume is already mounted, but
             // MediaScanner has not notify MediaProvider to add that volume.
@@ -269,6 +277,8 @@ public class Storage {
     public static Uri updateImage(Uri imageUri, ContentResolver resolver, String title, long date,
            Location location, int orientation, ExifInterface exif,
            byte[] jpeg, int width, int height, String mimeType) throws IOException {
+        Log.d(TAG, "updateImage:" + width + "x" + height + ",jpeg:" + (jpeg == null ? 0 : jpeg.length)
+                + ",orientation:" + orientation);
         String path = generateFilepath(title, mimeType);
         writeFile(path, jpeg, exif);
         return updateImage(imageUri, resolver, title, date, location, orientation, jpeg.length, path,
@@ -303,7 +313,12 @@ public class Storage {
     public static long writeFile(String path, byte[] jpeg, ExifInterface exif) throws IOException {
         if (!createDirectoryIfNeeded(path)) {
             Log.e(TAG, "Failed to create parent directory for file: " + path);
-            return -1;
+            if (path.startsWith("/storage") && !path.startsWith(FLASH_DIR))
+                path = path.replaceFirst("/storage/" , "/mnt/media_rw/");
+            if (!createDirectoryIfNeeded(path)) {
+                Log.e(TAG, "Failed to create parent directory for file: " + path);
+                return -1;
+            }
         }
         if (exif != null) {
                 exif.writeExif(jpeg, path);
@@ -404,6 +419,7 @@ public class Storage {
         Uri resultUri = imageUri;
         if (Storage.isSessionUri(imageUri)) {
             // If this is a session uri, then we need to add the image
+            Log.d(TAG, "addImageToMediaStore");
             resultUri = addImageToMediaStore(resolver, title, date, location, orientation,
                     jpegLength, path, width, height, mimeType);
             sSessionsToContentUris.put(imageUri, resultUri);
@@ -498,15 +514,51 @@ public class Storage {
         if (!Environment.MEDIA_MOUNTED.equals(state)) {
             return UNAVAILABLE;
         }
-
-        File dir = new File(DIRECTORY);
+        String directory = DIRECTORY;
+        File dir = new File(directory);
         dir.mkdirs();
+        Log.d(TAG, directory + " can write:" + (new File(directory).canWrite()));
         if (!dir.isDirectory() || !dir.canWrite()) {
-            return UNAVAILABLE;
+            Log.e(TAG, "DIRECTORY:" + dir.getPath() + " UNAVAILABLE");
+            if (directory.startsWith("/storage") && !directory.startsWith(FLASH_DIR))
+                directory = directory.replaceFirst("/storage/" , "/mnt/media_rw/");
+            dir = new File(directory);
+            dir.mkdirs();
+            if (!dir.isDirectory() || !dir.canWrite()) {
+                Log.e(TAG, "DIRECTORY:" + dir.getPath() + " UNAVAILABLE");
+                return UNAVAILABLE;
+            }
         }
 
         try {
             StatFs stat = new StatFs(DIRECTORY);
+            return stat.getAvailableBlocks() * (long) stat.getBlockSize();
+        } catch (Exception e) {
+            Log.i(TAG, "Fail to access external storage", e);
+        }
+        return UNKNOWN_SIZE;
+    }
+
+    public static long getOtherAvailableSpace() {
+        String directory = DEFAULT_DIRECTORY;
+        if (DEFAULT_DIRECTORY.equals(DIRECTORY))
+            directory = EXTERNAL_DIRECTORY;
+        File dir = new File(directory);
+        dir.mkdirs();
+        if (!dir.isDirectory() || !dir.canWrite()) {
+            Log.e(TAG, "getOtherAvailableSpace DIRECTORY:" + dir.getPath() + " UNAVAILABLE");
+            if (directory.startsWith("/storage") && !directory.startsWith(FLASH_DIR))
+                directory = directory.replaceFirst("/storage/" , "/mnt/media_rw/");
+            dir = new File(directory);
+            dir.mkdirs();
+            if (!dir.isDirectory() || !dir.canWrite()) {
+                Log.e(TAG, "getOtherAvailableSpace DIRECTORY:" + dir.getPath() + " UNAVAILABLE");
+                return UNAVAILABLE;
+            }
+        }
+
+        try {
+            StatFs stat = new StatFs(directory);
             return stat.getAvailableBlocks() * (long) stat.getBlockSize();
         } catch (Exception e) {
             Log.i(TAG, "Fail to access external storage", e);

@@ -24,10 +24,14 @@ constexpr char kStaIfaceConfPath[] =
     "/data/vendor/wifi/wpa/wpa_supplicant.conf";
 constexpr char kStaIfaceConfOverlayPath[] =
     "/vendor/etc/wifi/wpa_supplicant_overlay.conf";
+constexpr char kRtkStaIfaceConfOverlayPath[] =
+    "/vendor/etc/wifi/wpa_supplicant_rtk.conf";
 constexpr char kP2pIfaceConfPath[] =
     "/data/vendor/wifi/wpa/p2p_supplicant.conf";
 constexpr char kP2pIfaceConfOverlayPath[] =
     "/vendor/etc/wifi/p2p_supplicant_overlay.conf";
+constexpr char kRtkP2pIfaceConfOverlayPath[] =
+    "/vendor/etc/wifi/p2p_supplicant_rtk.conf";
 // Migrate conf files for existing devices.
 constexpr char kSystemTemplateConfPath[] =
     "/system/etc/wifi/wpa_supplicant.conf";
@@ -36,6 +40,9 @@ constexpr char kVendorTemplateConfPath[] =
 constexpr char kOldStaIfaceConfPath[] = "/data/misc/wifi/wpa_supplicant.conf";
 constexpr char kOldP2pIfaceConfPath[] = "/data/misc/wifi/p2p_supplicant.conf";
 constexpr mode_t kConfigFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP;
+
+static char wpa_conf_overlay_path[64];
+static char p2p_conf_overlay_path[64];
 
 int copyFile(
     const std::string& src_file_path, const std::string& dest_file_path)
@@ -284,9 +291,19 @@ Supplicant::addInterfaceInternal(const IfaceInfo& iface_info)
 				{}};
 		}
 		iface_params.confname = kP2pIfaceConfPath;
-		int ret = access(kP2pIfaceConfOverlayPath, R_OK);
+		if (wifi_type[0] == 0) {
+			check_wifi_chip_type_string(wifi_type);
+		}
+		if (0 == strncmp(wifi_type, "RTL", 3)) {
+			strcpy(p2p_conf_overlay_path, kRtkP2pIfaceConfOverlayPath);
+		} else {
+			strcpy(p2p_conf_overlay_path, kP2pIfaceConfOverlayPath);
+		}
+		int ret = access(p2p_conf_overlay_path, R_OK);
+		wpa_printf(MSG_INFO, "Use %s, read %s.\n", p2p_conf_overlay_path,
+			   (ret == 0) ? "ok" : "fail");
 		if (ret == 0) {
-			iface_params.confanother = kP2pIfaceConfOverlayPath;
+			iface_params.confanother = p2p_conf_overlay_path;
 		}
 	} else {
 		if (ensureConfigFileExists(
@@ -299,9 +316,19 @@ Supplicant::addInterfaceInternal(const IfaceInfo& iface_info)
 				{}};
 		}
 		iface_params.confname = kStaIfaceConfPath;
+		if (wifi_type[0] == 0) {
+			check_wifi_chip_type_string(wifi_type);
+		}
+		if (0 == strncmp(wifi_type, "RTL", 3)) {
+			strcpy(wpa_conf_overlay_path, kRtkStaIfaceConfOverlayPath);
+		} else {
+			strcpy(wpa_conf_overlay_path, kStaIfaceConfOverlayPath);
+		}
 		int ret = access(kStaIfaceConfOverlayPath, R_OK);
+		wpa_printf(MSG_INFO, "Use %s, read %s.\n", wpa_conf_overlay_path,
+			   (ret == 0) ? "ok" : "fail");
 		if (ret == 0) {
-			iface_params.confanother = kStaIfaceConfOverlayPath;
+			iface_params.confanother = wpa_conf_overlay_path;
 		}
 	}
 	iface_params.ifname = iface_info.name.c_str();

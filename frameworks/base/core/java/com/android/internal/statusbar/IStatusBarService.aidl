@@ -147,4 +147,7 @@ interface IStatusBarService
      * display.
      */
     void suppressAmbientDisplay(boolean suppress);
+
+    //firefly_modify_songjf, add bar interface
+    void addBar();
 }

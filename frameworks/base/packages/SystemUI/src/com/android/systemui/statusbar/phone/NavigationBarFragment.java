@@ -70,6 +70,8 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
@@ -140,6 +142,10 @@ import javax.inject.Inject;
 
 import dagger.Lazy;
 
+import android.view.IWindowManager;
+import android.view.WindowManagerGlobal;
+import android.view.Surface;
+
 /**
  * Fragment containing the NavigationBarFragment. Contains logic for what happens
  * on clicks and view states of the nav bar.
@@ -157,6 +163,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     /** Allow some time inbetween the long press for back and recents. */
     private static final int LOCK_TO_APP_GESTURE_TOLERENCE = 200;
     private static final long AUTODIM_TIMEOUT_MS = 2250;
+    private static final long SCREENSHOT_TIME_INTERVAL = 3000;
 
     private final AccessibilityManagerWrapper mAccessibilityManagerWrapper;
     protected final AssistManager mAssistManager;
@@ -174,6 +181,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private @TransitionMode int mNavigationBarMode;
     private AccessibilityManager mAccessibilityManager;
     private ContentResolver mContentResolver;
+    private ContentObserver mScreenshotShowObserver;
     private boolean mAssistantAvailable;
 
     private int mDisabledFlags1;
@@ -211,6 +219,9 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private boolean mIsOnDefaultDisplay;
     public boolean mHomeBlockedThisTouch;
 
+    //for rotation
+    private static int rotation =  0;
+
     /**
      * When user is QuickSwitching between apps of different orientations, we'll draw a fake
      * home handle on the orientation they originally touched down to start their swipe
@@ -228,6 +239,7 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
     private ViewTreeObserver.OnGlobalLayoutListener mOrientationHandleGlobalLayoutListener;
     private UiEventLogger mUiEventLogger;
     private boolean mShowOrientedHandleForImmersiveMode;
+    private long mLastClickScreenshotTime = 0;
 
     @com.android.internal.annotations.VisibleForTesting
     public enum NavBarActionEvent implements UiEventLogger.UiEventEnum {
@@ -437,6 +449,17 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         mContentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(Settings.Secure.ASSISTANT),
                 false /* notifyForDescendants */, mAssistContentObserver, UserHandle.USER_ALL);
+        mScreenshotShowObserver = new ContentObserver( getContext().getMainThreadHandler()) {
+            @Override
+            public void onChange(boolean selfChange) {
+                boolean isShow = Settings.System.getInt(getContext().getContentResolver(), Settings.System.SCREENSHOT_BUTTON_SHOW, 1) == 1;
+                ButtonDispatcher screenshotButton = mNavigationBarView.getScreenshotButton();
+                screenshotButton.setVisibility(isShow ? View.VISIBLE : View.GONE);
+            }
+        };
+        mContentResolver.registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SCREENSHOT_BUTTON_SHOW), true,
+                mScreenshotShowObserver, UserHandle.USER_ALL);
 
         if (savedInstanceState != null) {
             mDisabledFlags1 = savedInstanceState.getInt(EXTRA_DISABLE_STATE, 0);
@@ -469,6 +492,9 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         mDeviceProvisionedController.removeCallback(mUserSetupListener);
 
         DeviceConfig.removeOnPropertiesChangedListener(mOnPropertiesChangedListener);
+        if(null != mScreenshotShowObserver){
+            mContentResolver.unregisterContentObserver(mScreenshotShowObserver);
+        }
     }
 
     @Override
@@ -519,9 +545,9 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
 
             // Reset user rotation pref to match that of the WindowManager if starting in locked
             // mode. This will automatically happen when switching from auto-rotate to locked mode.
-            if (display != null && rotationButtonController.isRotationLocked()) {
-                rotationButtonController.setRotationLockedAtAngle(display.getRotation());
-            }
+            // if (display != null && rotationButtonController.isRotationLocked()) {
+            //     rotationButtonController.setRotationLockedAtAngle(display.getRotation());
+            // }
         } else {
             mDisabledFlags2 |= StatusBarManager.DISABLE2_ROTATE_SUGGESTIONS;
         }
@@ -1005,6 +1031,125 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
         updateAccessibilityServicesState(mAccessibilityManager);
 
         updateScreenPinningGestures();
+
+        ButtonDispatcher screenshotButton = mNavigationBarView.getScreenshotButton();
+        screenshotButton.setOnClickListener(this:: screenshotClick);
+        //screenshotButton.setOnTouchListener(this:: screenshotTouch);
+        boolean isShow=Settings.System.getInt(getContext().getContentResolver(), Settings.System.SCREENSHOT_BUTTON_SHOW, 1) == 1;
+        if(isShow){
+            screenshotButton.setVisibility(View.VISIBLE);
+        }else{
+            screenshotButton.setVisibility(View.GONE);
+        }
+
+        ButtonDispatcher volumeAddButton=mNavigationBarView.getVolumeAddButton();
+        ButtonDispatcher volumeSubButton=mNavigationBarView.getVolumeSubButton();
+        boolean isShowVolumeButton="true".equals(SystemProperties.get("ro.rk.systembar.voiceicon","true"));
+        if(isShowVolumeButton){
+            volumeAddButton.setVisibility(View.VISIBLE);
+            volumeSubButton.setVisibility(View.VISIBLE);
+        }else{
+            volumeAddButton.setVisibility(View.GONE);
+            volumeSubButton.setVisibility(View.GONE);
+        }
+        if (getContext().getResources().getConfiguration().smallestScreenWidthDp < 400) {
+            volumeAddButton.setVisibility(View.GONE);
+            volumeSubButton.setVisibility(View.GONE);
+        }
+
+	    /**firefly_modify_songjf,add poweroff button**/
+        ButtonDispatcher poweroffButton = mNavigationBarView.getPoweroffButton();
+        poweroffButton.setOnClickListener(this:: poweroffClick);
+        poweroffButton.setOnTouchListener(this:: poweroffTouch);
+        poweroffButton.setVisibility(View.VISIBLE);
+
+        ButtonDispatcher rotationButton = mNavigationBarView.getRotationButton();
+        rotationButton.setOnClickListener(this:: rotationClick);
+        rotationButton.setOnTouchListener(this:: rotationTouch);
+        boolean showRotationButton=Settings.System.getInt(getContext().getContentResolver(),
+                               Settings.System.ENABLE_ROTATION_BY_USER, 1) == 1;
+        if (showRotationButton) {
+            rotationButton.setVisibility(View.VISIBLE);
+        } else {
+            rotationButton.setVisibility(View.GONE);
+        }
+
+        /**firefly_modify_songjf,add add/remove bar button**/
+        ButtonDispatcher hideBarButton = mNavigationBarView.getHidebarButton();
+        hideBarButton.setOnClickListener(this:: hideBarClick);
+        hideBarButton.setOnTouchListener(this:: hideBarTouch);
+        boolean showHideBarButton=Settings.System.getInt(getContext().getContentResolver(),
+                               Settings.System.HIDEBAR_BUTTON_SHOW, 1) == 1;
+        if (showHideBarButton) {
+            hideBarButton.setVisibility(View.VISIBLE);
+        } else {
+            hideBarButton.setVisibility(View.GONE);
+        }
+    }
+
+    private boolean poweroffTouch(View v, MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_UP) {
+            Intent intent=new Intent(Intent.ACTION_SYSTEMUI_FIREFLY_POWEROFF);
+            getContext().sendBroadcast(intent);
+        }
+        return false;
+    }
+
+    private void poweroffClick(View v) {
+        Intent intent=new Intent(Intent.ACTION_SYSTEMUI_FIREFLY_POWEROFF);
+        getContext().sendBroadcast(intent);
+    }
+
+    private boolean rotationTouch(View v, MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_UP) {
+            try {
+                // ROTATION_0 = 0;
+                // ROTATION_90 = 1;
+                // ROTATION_180 = 2;
+                // ROTATION_270 = 3;
+               IWindowManager wm = WindowManagerGlobal.getWindowManagerService();
+                rotation = wm.getDefaultDisplayRotation();
+                rotation ++;
+                if(rotation > Surface.ROTATION_270)
+                    rotation = Surface.ROTATION_0;
+
+                wm.freezeRotation(rotation);
+            } catch (RemoteException exc) {
+                Log.w(TAG, "Unable to Rotation");
+            }
+        }
+        return false;
+    }
+
+    private void rotationClick(View v) {
+        try {
+            // ROTATION_0 = 0;
+            // ROTATION_90 = 1;
+            // ROTATION_180 = 2;
+            // ROTATION_270 = 3;
+            IWindowManager wm = WindowManagerGlobal.getWindowManagerService();
+            rotation = wm.getDefaultDisplayRotation();
+            rotation ++;
+            if(rotation > Surface.ROTATION_270)
+                rotation = Surface.ROTATION_0;
+
+            wm.freezeRotation(rotation);
+        } catch (RemoteException exc) {
+            Log.w(TAG, "Unable to Rotation");
+        }
+    }
+
+    private boolean hideBarTouch(View v, MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_UP) {
+            Intent intent=new Intent(Intent.ACTION_HIDE_BAR);
+            getContext().sendBroadcast(intent);
+        }
+        return false;
+    }
+
+    private void hideBarClick(View v) {
+        Intent intent=new Intent(Intent.ACTION_HIDE_BAR);
+        getContext().sendBroadcast(intent);
     }
 
     private boolean onHomeTouch(View v, MotionEvent event) {
@@ -1189,6 +1334,24 @@ public class NavigationBarFragment extends LifecycleFragment implements Callback
 
         return mStatusBarLazy.get().toggleSplitScreenMode(MetricsEvent.ACTION_WINDOW_DOCK_LONGPRESS,
                 MetricsEvent.ACTION_WINDOW_UNDOCK_LONGPRESS);
+    }
+
+    private boolean screenshotTouch(View v, MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_UP) {
+            Intent intent=new Intent("android.intent.action.SCREENSHOT");
+            getContext().sendBroadcast(intent);
+        }
+        return false;
+    }
+
+    private void screenshotClick(View v) {
+        long nowTime = SystemClock.elapsedRealtime();
+        if (nowTime - mLastClickScreenshotTime < SCREENSHOT_TIME_INTERVAL) {
+            return;
+        }
+        Intent intent=new Intent("android.intent.action.SCREENSHOT");
+        getContext().sendBroadcast(intent);
+        mLastClickScreenshotTime = nowTime;
     }
 
     private void onAccessibilityClick(View v) {

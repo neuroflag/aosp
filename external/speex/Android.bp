@@ -61,3 +61,45 @@ cc_library_shared {
         misc_undefined: ["bounds"],
     },
 }
+
+cc_library_static {
+    name: "libspeex",
+
+    vendor: true,
+    arch: {
+        arm: {
+            instruction_set: "arm",
+        },
+    },
+    srcs: ["libspeexdsp/preprocess.c",
+           "libspeexdsp/jitter.c",
+           "libspeexdsp/mdf.c",
+           "libspeexdsp/fftwrap.c",
+           "libspeexdsp/filterbank.c",
+           "libspeexdsp/resample.c",
+           "libspeexdsp/buffer.c",
+           "libspeexdsp/scal.c",
+           "libspeexdsp/smallft.c"],
+
+    cflags: [
+        "-DEXPORT=__attribute__((visibility(\"default\")))",
+        "-DFLOATING_POINT",
+        "-DHAVE_STDINT_H",
+        "-DUSE_SMALLFT",
+        "-DVAR_ARRAYS",
+        "-O3",
+        "-fstrict-aliasing",
+        "-fprefetch-loop-arrays",
+        "-Wall",
+        "-Werror",
+        "-Wno-sign-compare",
+        "-Wno-unused-parameter",
+    ],
+
+    local_include_dirs: ["include"],
+    export_include_dirs: ["include"],
+    sanitize: {
+        integer_overflow: true,
+        misc_undefined: ["bounds"],
+    },
+}

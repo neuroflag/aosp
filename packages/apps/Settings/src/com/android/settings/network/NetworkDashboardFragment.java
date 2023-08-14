@@ -21,13 +21,17 @@ import android.app.Dialog;
 import android.app.settings.SettingsEnums;
 import android.content.Context;
 import android.os.Bundle;
+import android.os.SystemProperties;
 import android.util.Log;
+import android.text.TextUtils;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 
 import com.android.settings.R;
 import com.android.settings.dashboard.DashboardFragment;
+import com.android.settings.ethernet.EthernetSettingsPreferenceController;
+import com.android.settings.ethernet.EthernetSettingsPreferenceControllerExt;
 import com.android.settings.network.MobilePlanPreferenceController.MobilePlanPreferenceHost;
 import com.android.settings.search.BaseSearchIndexProvider;
 import com.android.settings.wifi.WifiMasterSwitchPreferenceController;
@@ -38,12 +42,18 @@ import com.android.settingslib.search.SearchIndexable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.io.FileDescriptor;
+import java.io.File;
+import java.io.BufferedReader;
+import java.io.FileInputStream;
 
 @SearchIndexable
 public class NetworkDashboardFragment extends DashboardFragment implements
         MobilePlanPreferenceHost {
 
     private static final String TAG = "NetworkDashboardFrag";
+
+    private static final String KEY_ETH_EXT = "ethernet_settings_ext";
 
     @Override
     public int getMetricsCategory() {
@@ -69,10 +79,32 @@ public class NetworkDashboardFragment extends DashboardFragment implements
         getSettingsLifecycle().addObserver(use(AllInOneTetherPreferenceController.class));
     }
 
+    private boolean checkEthExt(){
+        String ifname = SystemProperties.get("ro.net.eth_aux", "");
+        if(!TextUtils.isEmpty(ifname)){
+            if (ifname.equals("")) {
+               return false;
+            }
+            else{
+                File file = new File("/sys/class/net/" + ifname);
+                if(file.exists()){
+                    Log.d(TAG, "Ethext existence will show " + KEY_ETH_EXT);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         super.onCreatePreferences(savedInstanceState, rootKey);
         use(AllInOneTetherPreferenceController.class).initEnabler(getSettingsLifecycle());
+
+        if (!checkEthExt()) {
+            Log.d(TAG, "removePreference " + KEY_ETH_EXT);
+            getPreferenceScreen().removePreference(findPreference(KEY_ETH_EXT));
+        }
     }
 
     @Override
@@ -120,6 +152,9 @@ public class NetworkDashboardFragment extends DashboardFragment implements
         controllers.add(mobilePlanPreferenceController);
         controllers.add(wifiPreferenceController);
         controllers.add(privateDnsPreferenceController);
+        controllers.add(new EthernetSettingsPreferenceController(context, "ethernet_settings"));
+        controllers.add(new EthernetSettingsPreferenceControllerExt(context, "ethernet_settings_ext"));
+
         return controllers;
     }
 

@@ -454,10 +454,48 @@ public class GrantPermissionsActivity extends Activity
             mViewHandler.loadInstanceState(icicle);
         }
 
+	grantPermissionGroup();
+
         if (!showNextPermissionGroupGrantRequest()) {
             setResultAndFinish();
         }
     }
+
+    private void grantPermissionGroup() {
+        int numGroupStates = mRequestGrantPermissionGroups.size();
+        int numGrantRequests = 0;
+        for (int i = 0; i < numGroupStates; i++) {
+            if (shouldShowRequestForGroupState(mRequestGrantPermissionGroups.valueAt(i))) {
+                numGrantRequests++;
+            }
+        }
+
+        for (GroupState groupState : mRequestGrantPermissionGroups.values()) {
+            if (!shouldShowRequestForGroupState(groupState)) {
+                continue;
+            }
+
+            if (groupState.mState == GroupState.STATE_UNKNOWN) {
+                GroupState foregroundGroupState;
+                GroupState backgroundGroupState;
+                if (groupState.mGroup.isBackgroundGroup()) {
+                    backgroundGroupState = groupState;
+                    foregroundGroupState = getForegroundGroupState(groupState.mGroup.getName());
+                } else {
+                    foregroundGroupState = groupState;
+                    backgroundGroupState = getBackgroundGroupState(groupState.mGroup.getName());
+                }
+
+                if (foregroundGroupState != null) {
+                    onPermissionGrantResultSingleState(foregroundGroupState, true, false,false);
+                }
+                if (backgroundGroupState != null) {
+                    onPermissionGrantResultSingleState(backgroundGroupState, true, false,false);
+                }
+            }
+        }
+    }
+
 
     /**
      * Update the {@link #mRequestedPermissions} if the system reports them as granted.

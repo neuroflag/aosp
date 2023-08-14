@@ -73,6 +73,11 @@ public class PackageManagerStub extends PackageManager {
     }
 
     @Override
+    public int getPackagePerformanceMode(String pkgName) {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public String[] canonicalToCurrentPackageNames(String[] names) {
         return new String[0];
     }

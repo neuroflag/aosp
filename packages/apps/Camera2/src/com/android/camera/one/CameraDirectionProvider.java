@@ -33,6 +33,7 @@ public class CameraDirectionProvider {
         switch (mCharacteristics.get(CameraCharacteristics.LENS_FACING)) {
             case CameraMetadata.LENS_FACING_BACK:
                 return OneCamera.Facing.BACK;
+            case CameraMetadata.LENS_FACING_EXTERNAL:
             case CameraMetadata.LENS_FACING_FRONT:
                 return OneCamera.Facing.FRONT;
         }

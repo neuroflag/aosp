@@ -35,6 +35,7 @@
 #include <netlink/attr.h>
 #include <netlink/handlers.h>
 #include <netlink/msg.h>
+#include <cutils/properties.h>
 
 #include <dirent.h>
 #include <net/if.h>
@@ -45,14 +46,14 @@
 #include "sync.h"
 
 #define LOG_TAG  "WifiHAL"
+
 #include <log/log.h>
 
+#include "version.h"
 #include "wifi_hal.h"
 #include "common.h"
 #include "cpp_bindings.h"
 #include "rtt.h"
-#include "brcm_version.h"
-#include <stdio.h>
 /*
  BUGBUG: normally, libnl allocates ports for all connections it makes; but
  being a static library, it doesn't really know how many other netlink connections
@@ -70,7 +71,6 @@
  */
 #define POLL_DRIVER_DURATION_US (100000)
 #define POLL_DRIVER_MAX_TIME_MS (10000)
-#define EVENT_BUF_SIZE 2048
 
 static void internal_event_handler(wifi_handle handle, int events);
 static int internal_no_seq_check(nl_msg *msg, void *arg);
@@ -87,17 +87,16 @@ static wifi_error wifi_get_packet_filter_capabilities(wifi_interface_handle hand
                 u32 *version, u32 *max_len);
 static wifi_error wifi_configure_nd_offload(wifi_interface_handle iface, u8 enable);
 
+wifi_error wifi_get_wake_reason_stats(wifi_interface_handle iface,
+                             WLAN_DRIVER_WAKE_REASON_CNT *wifi_wake_reason_cnt);
+
 typedef enum wifi_attr {
     ANDR_WIFI_ATTRIBUTE_NUM_FEATURE_SET,
     ANDR_WIFI_ATTRIBUTE_FEATURE_SET,
     ANDR_WIFI_ATTRIBUTE_PNO_RANDOM_MAC_OUI,
     ANDR_WIFI_ATTRIBUTE_NODFS_SET,
     ANDR_WIFI_ATTRIBUTE_COUNTRY,
-    ANDR_WIFI_ATTRIBUTE_ND_OFFLOAD_VALUE,
-    ANDR_WIFI_ATTRIBUTE_TCPACK_SUP_VALUE,
-    ANDR_WIFI_ATTRIBUTE_LATENCY_MODE,
-    ANDR_WIFI_ATTRIBUTE_RANDOM_MAC,
-    ANDR_WIFI_ATTRIBUTE_TX_POWER_SCENARIO
+    ANDR_WIFI_ATTRIBUTE_ND_OFFLOAD_VALUE
     // Add more attribute here
 } wifi_attr_t;
 
@@ -217,96 +216,49 @@ wifi_error init_wifi_vendor_hal_func_table(wifi_hal_fn *fn)
     fn->wifi_get_tx_pkt_fates = wifi_get_tx_pkt_fates;
     fn->wifi_get_rx_pkt_fates = wifi_get_rx_pkt_fates;
     fn->wifi_get_packet_filter_capabilities = wifi_get_packet_filter_capabilities;
-    fn->wifi_get_wake_reason_stats = wifi_get_wake_reason_stats;
     fn->wifi_set_packet_filter = wifi_set_packet_filter;
-    fn->wifi_enable_firmware_roaming = wifi_enable_firmware_roaming;
-    fn->wifi_get_roaming_capabilities = wifi_get_roaming_capabilities;
-    fn->wifi_configure_roaming = wifi_configure_roaming;
-    fn->wifi_nan_register_handler = nan_register_handler;
-    fn->wifi_nan_enable_request = nan_enable_request;
-    fn->wifi_nan_disable_request = nan_disable_request;
-    fn->wifi_nan_publish_request = nan_publish_request;
-    fn->wifi_nan_publish_cancel_request = nan_publish_cancel_request;
-    fn->wifi_nan_subscribe_request = nan_subscribe_request;
-    fn->wifi_nan_subscribe_cancel_request = nan_subscribe_cancel_request;
-    fn->wifi_nan_transmit_followup_request = nan_transmit_followup_request;
-    fn->wifi_nan_stats_request = nan_stats_request;
-    fn->wifi_nan_config_request = nan_config_request;
-    fn->wifi_nan_tca_request = nan_tca_request;
-    fn->wifi_nan_beacon_sdf_payload_request = nan_beacon_sdf_payload_request;
-    fn->wifi_nan_get_version = nan_get_version;
-    fn->wifi_nan_get_capabilities = nan_get_capabilities;
-    fn->wifi_nan_data_interface_create = nan_data_interface_create;
-    fn->wifi_nan_data_interface_delete = nan_data_interface_delete;
-    fn->wifi_nan_data_request_initiator = nan_data_request_initiator;
-    fn->wifi_nan_data_indication_response = nan_data_indication_response;
-    fn->wifi_nan_data_end = nan_data_end;
-    fn->wifi_set_latency_mode = wifi_set_latency_mode;
-#ifdef NAN_CLUSTER_MERGE
-    fn->wifi_nan_enable_merge_request = nan_enable_cluster_merge_request;
-#endif /* NAN_CLUSTER_MERGE */
-    fn->wifi_select_tx_power_scenario = wifi_select_tx_power_scenario;
-    fn->wifi_reset_tx_power_scenario = wifi_reset_tx_power_scenario;
-
+    fn->wifi_get_wake_reason_stats = wifi_get_wake_reason_stats;
     return WIFI_SUCCESS;
 }
 
-hal_info *halInfo = NULL;
-wifi_error wifi_pre_initialize(void)
+wifi_error wifi_initialize(wifi_handle *handle)
 {
     srand(getpid());
 
-    int numIfaceHandles = 0;
-    wifi_interface_handle *ifaceHandles = NULL;
-    wifi_interface_handle wlan0Handle;
-    wifi_error result = WIFI_SUCCESS;
-    wifi_handle handle;
+	if (check_wifi_chip_type() == REALTEK_WIFI) {
+		ALOGI("Initializing REALTEK_WIFI, version : %s", RTW_WIFI_HAL_VERSION);
+	} else {
+		ALOGI("Initializing BROADCOM_WIFI");
+	}
 
-    ALOGE("wifi_pre_initialize");
-    ALOGE("--- HAL version: %s ---\n", HAL_VERSION);
-    halInfo = (hal_info *)malloc(sizeof(hal_info));
-    if (halInfo == NULL) {
+    hal_info *info = (hal_info *)malloc(sizeof(hal_info));
+    if (info == NULL) {
         ALOGE("Could not allocate hal_info");
         return WIFI_ERROR_UNKNOWN;
     }
 
-    memset(halInfo, 0, sizeof(*halInfo));
+    memset(info, 0, sizeof(*info));
 
     ALOGI("Creating socket");
-    if (socketpair(AF_UNIX, SOCK_STREAM, 0, halInfo->cleanup_socks) == -1) {
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, info->cleanup_socks) == -1) {
         ALOGE("Could not create cleanup sockets");
-        free(halInfo);
+        free(info);
         return WIFI_ERROR_UNKNOWN;
     }
 
     struct nl_sock *cmd_sock = wifi_create_nl_socket(WIFI_HAL_CMD_SOCK_PORT);
     if (cmd_sock == NULL) {
         ALOGE("Could not create handle");
-        free(halInfo);
+        free(info);
         return WIFI_ERROR_UNKNOWN;
     }
 
-    /* Set the socket buffer size */
-    if (nl_socket_set_buffer_size(cmd_sock, (256*1024), 0) < 0) {
-        ALOGE("Could not set size for cmd_sock: %s",
-               strerror(errno));
-    } else {
-        ALOGV("nl_socket_set_buffer_size successful for cmd_sock");
-    }
     struct nl_sock *event_sock = wifi_create_nl_socket(WIFI_HAL_EVENT_SOCK_PORT);
     if (event_sock == NULL) {
         ALOGE("Could not create handle");
         nl_socket_free(cmd_sock);
-        free(halInfo);
+        free(info);
         return WIFI_ERROR_UNKNOWN;
-    }
-
-    /* Set the socket buffer size */
-    if (nl_socket_set_buffer_size(event_sock, (512*1024), 0) < 0) {
-        ALOGE("Could not set size for event_sock: %s",
-               strerror(errno));
-    } else {
-        ALOGV("nl_socket_set_buffer_size successful for event_sock");
     }
 
     struct nl_cb *cb = nl_socket_get_cb(event_sock);
@@ -314,121 +266,65 @@ wifi_error wifi_pre_initialize(void)
         ALOGE("Could not create handle");
         nl_socket_free(cmd_sock);
         nl_socket_free(event_sock);
-        free(halInfo);
+        free(info);
         return WIFI_ERROR_UNKNOWN;
     }
 
-    nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, internal_no_seq_check, halInfo);
-    nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, internal_valid_message_handler, halInfo);
+    // ALOGI("cb->refcnt = %d", cb->cb_refcnt);
+    nl_cb_set(cb, NL_CB_SEQ_CHECK, NL_CB_CUSTOM, internal_no_seq_check, info);
+    nl_cb_set(cb, NL_CB_VALID, NL_CB_CUSTOM, internal_valid_message_handler, info);
     nl_cb_put(cb);
 
-    halInfo->cmd_sock = cmd_sock;
-    halInfo->event_sock = event_sock;
-    halInfo->clean_up = false;
-    halInfo->in_event_loop = false;
+    info->cmd_sock = cmd_sock;
+    info->event_sock = event_sock;
+    info->clean_up = false;
+    info->in_event_loop = false;
 
-    halInfo->event_cb = (cb_info *)malloc(sizeof(cb_info) * DEFAULT_EVENT_CB_SIZE);
-    halInfo->alloc_event_cb = DEFAULT_EVENT_CB_SIZE;
-    halInfo->num_event_cb = 0;
+    info->event_cb = (cb_info *)malloc(sizeof(cb_info) * DEFAULT_EVENT_CB_SIZE);
+    info->alloc_event_cb = DEFAULT_EVENT_CB_SIZE;
+    info->num_event_cb = 0;
 
-    halInfo->cmd = (cmd_info *)malloc(sizeof(cmd_info) * DEFAULT_CMD_SIZE);
-    halInfo->alloc_cmd = DEFAULT_CMD_SIZE;
-    halInfo->num_cmd = 0;
+    info->cmd = (cmd_info *)malloc(sizeof(cmd_info) * DEFAULT_CMD_SIZE);
+    info->alloc_cmd = DEFAULT_CMD_SIZE;
+    info->num_cmd = 0;
 
-    halInfo->nl80211_family_id = genl_ctrl_resolve(cmd_sock, "nl80211");
-    if (halInfo->nl80211_family_id < 0) {
+    info->nl80211_family_id = genl_ctrl_resolve(cmd_sock, "nl80211");
+    if (info->nl80211_family_id < 0) {
         ALOGE("Could not resolve nl80211 familty id");
         nl_socket_free(cmd_sock);
         nl_socket_free(event_sock);
-        free(halInfo);
+        free(info);
         return WIFI_ERROR_UNKNOWN;
     }
 
-    pthread_mutex_init(&halInfo->cb_lock, NULL);
-    InitResponseLock();
+    pthread_mutex_init(&info->cb_lock, NULL);
 
-    handle = (wifi_handle) halInfo;
+    *handle = (wifi_handle) info;
 
-    if (wifi_init_interfaces(handle) != WIFI_SUCCESS) {
+    if (wifi_init_interfaces(*handle) != WIFI_SUCCESS) {
         ALOGE("No wifi interface found");
         nl_socket_free(cmd_sock);
         nl_socket_free(event_sock);
-        pthread_mutex_destroy(&halInfo->cb_lock);
-        free(halInfo);
+        pthread_mutex_destroy(&info->cb_lock);
+        free(info);
         return WIFI_ERROR_NOT_AVAILABLE;
     }
 
-    if ((wifi_add_membership(handle, "scan") < 0) ||
-            (wifi_add_membership(handle, "mlme")  < 0) ||
-            (wifi_add_membership(handle, "regulatory") < 0) ||
-            (wifi_add_membership(handle, "vendor") < 0)) {
+    if ((wifi_add_membership(*handle, "scan") < 0) ||
+        (wifi_add_membership(*handle, "mlme")  < 0) ||
+        (wifi_add_membership(*handle, "regulatory") < 0) ||
+        (wifi_add_membership(*handle, "vendor") < 0)) {
         ALOGE("Add membership failed");
         nl_socket_free(cmd_sock);
         nl_socket_free(event_sock);
-        pthread_mutex_destroy(&halInfo->cb_lock);
-        free(halInfo);
+        pthread_mutex_destroy(&info->cb_lock);
+        free(info);
         return WIFI_ERROR_NOT_AVAILABLE;
     }
 
+    // ALOGI("Found %d interfaces", info->num_interfaces);
+
     ALOGI("Initialized Wifi HAL Successfully; vendor cmd = %d", NL80211_CMD_VENDOR);
-    wlan0Handle = wifi_get_wlan_interface((wifi_handle)halInfo, ifaceHandles, numIfaceHandles);
-
-    if (wlan0Handle != NULL) {
-        ALOGE("Calling preInit");
-        if (!get_halutil_mode()) {
-            result = wifi_hal_preInit(wlan0Handle);
-            if (result != WIFI_SUCCESS) {
-                ALOGE("wifi_hal_preInit failed");
-            }
-        }
-    }
-
-    return WIFI_SUCCESS;
-}
-
-wifi_error wifi_initialize(wifi_handle *handle)
-{
-
-    int numIfaceHandles = 0;
-    wifi_interface_handle *ifaceHandles = NULL;
-    wifi_interface_handle wlan0Handle;
-    wifi_error result = WIFI_SUCCESS;
-
-    ALOGE("wifi_initialize");
-
-    if (halInfo == NULL) {
-        result = wifi_pre_initialize();
-        if (result != WIFI_SUCCESS) {
-            ALOGE("wifi_initialize wifi_pre_initialize failed");
-            return result;
-        } else {
-            ALOGE("wifi_initialize wifi_pre_initialize succeeded");
-        }
-    }
-
-    *handle = (wifi_handle) halInfo;
-    wlan0Handle = wifi_get_wlan_interface((wifi_handle)halInfo, ifaceHandles, numIfaceHandles);
-
-    if (wlan0Handle != NULL) {
-        ALOGE("Calling Hal_init");
-        if (!get_halutil_mode()) {
-            result = wifi_start_hal(wlan0Handle);
-            if (result != WIFI_SUCCESS) {
-                ALOGE("wifi_start_hal failed");
-            }
-#ifdef FILE_DUMP
-            else {
-                ALOGE("Calling start file dump");
-                result = wifi_start_file_dump(wlan0Handle);
-                if (result != WIFI_SUCCESS) {
-                    ALOGE("wifi_start_file_dump failed");
-                }
-            }
-#endif /* FILE_DUMP */
-        }
-    } else {
-        ALOGI("Not Calling set alert handler as global_iface is NULL");
-    }
     return WIFI_SUCCESS;
 }
 
@@ -442,7 +338,6 @@ wifi_error wifi_wait_for_driver_ready(void)
     do {
         if ((fd = fopen("/sys/class/net/wlan0", "r")) != NULL) {
             fclose(fd);
-            wifi_pre_initialize();
             return WIFI_SUCCESS;
         }
         usleep(POLL_DRIVER_DURATION_US);
@@ -476,10 +371,7 @@ static void internal_cleaned_up_handler(wifi_handle handle)
     hal_info *info = getHalInfo(handle);
     wifi_cleaned_up_handler cleaned_up_handler = info->cleaned_up_handler;
 
-    ALOGI("internal clean up");
-
     if (info->cmd_sock != 0) {
-        ALOGI("cmd_sock non null. clean up");
         close(info->cleanup_socks[0]);
         close(info->cleanup_socks[1]);
         nl_socket_free(info->cmd_sock);
@@ -488,57 +380,19 @@ static void internal_cleaned_up_handler(wifi_handle handle)
         info->event_sock = NULL;
     }
 
-    if (cleaned_up_handler) {
-        ALOGI("cleanup_handler cb");
-        (*cleaned_up_handler)(handle);
-    } else {
-        ALOGI("!! clean up handler is null!!");
-    }
-    DestroyResponseLock();
+    (*cleaned_up_handler)(handle);
     pthread_mutex_destroy(&info->cb_lock);
     free(info);
 
     ALOGI("Internal cleanup completed");
-}
-void wifi_internal_module_cleanup()
-{
-    nan_deinit_handler();
 }
 
 void wifi_cleanup(wifi_handle handle, wifi_cleaned_up_handler handler)
 {
     hal_info *info = getHalInfo(handle);
     char buf[64];
-    wifi_error result;
-
-    int numIfaceHandles = 0;
-    wifi_interface_handle *ifaceHandles = NULL;
-    wifi_interface_handle wlan0Handle;
 
     info->cleaned_up_handler = handler;
-
-    wlan0Handle = wifi_get_wlan_interface((wifi_handle) info, ifaceHandles, numIfaceHandles);
-
-    if (wlan0Handle != NULL) {
-        ALOGE("Calling hal cleanup");
-        if (!get_halutil_mode()) {
-            result = wifi_stop_hal(wlan0Handle);
-            if (result != WIFI_SUCCESS) {
-                ALOGE("wifi_stop_hal failed");
-            }
-        }
-
-#ifdef FILE_DUMP
-        ALOGE("Calling stop file dump");
-        result = wifi_stop_file_dump(wlan0Handle);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("wifi_stop_file_dump failed");
-        }
-#endif /* FILE_DUMP */
-    } else {
-        ALOGE("Not cleaning up hal as global_iface is NULL");
-    }
-
     if (TEMP_FAILURE_RETRY(write(info->cleanup_socks[0], "Exit", 4)) < 1) {
         // As a fallback set the cleanup flag to TRUE
         ALOGE("could not write to the cleanup socket");
@@ -559,28 +413,16 @@ void wifi_cleanup(wifi_handle handle, wifi_cleaned_up_handler handler)
         }
     }
     info->clean_up = true;
-    wifi_internal_module_cleanup();
-    ALOGI("wifi nan internal clean up done");
     pthread_mutex_lock(&info->cb_lock);
 
     int bad_commands = 0;
 
-    ALOGI("event_cb callbacks left: %d ", info->num_event_cb);
     for (int i = 0; i < info->num_event_cb; i++) {
-        ALOGI("event_cb cleanup. index:%d", i);
         cb_info *cbi = &(info->event_cb[i]);
-        if (!cbi) {
-            ALOGE("cbi null for index %d", i);
-            continue;
-        }
-        ALOGI("event_cb cleanup. vendor cmd:%d sub_cmd:%d", cbi->vendor_id, cbi->vendor_subcmd);
         WifiCommand *cmd = (WifiCommand *)cbi->cb_arg;
-        if (cmd != NULL) {
-            ALOGI("Command left in event_cb %p", cmd);
-        }
+        ALOGI("Command left in event_cb %p:%s", cmd, (cmd ? cmd->getType(): ""));
     }
 
-    ALOGI("Check bad commands: num_cmd:%d bad_commands:%d", info->num_cmd, bad_commands);
     while (info->num_cmd > bad_commands) {
         int num_cmd = info->num_cmd;
         cmd_info *cmdi = &(info->cmd[bad_commands]);
@@ -601,16 +443,11 @@ void wifi_cleanup(wifi_handle handle, wifi_cleaned_up_handler handler)
 
     for (int i = 0; i < info->num_event_cb; i++) {
         cb_info *cbi = &(info->event_cb[i]);
-        if (!cbi) {
-            ALOGE("cbi null for index %d", i);
-            continue;
-        }
         WifiCommand *cmd = (WifiCommand *)cbi->cb_arg;
         ALOGE("Leaked command %p", cmd);
     }
     pthread_mutex_unlock(&info->cb_lock);
     internal_cleaned_up_handler(handle);
-    ALOGE("wifi_clean_up done");
 }
 
 static int internal_pollin_handler(wifi_handle handle)
@@ -845,10 +682,6 @@ public:
         : WifiCommand("SetPnoMacAddrOuiCommand", handle, 0)
     {
         mOui = scan_oui;
-        fset = NULL;
-        feature_matrix = NULL;
-        fm_size = NULL;
-        set_size_max = 0;
     }
 
     int createRequest(WifiRequest& request, int subcmd, byte *scan_oui) {
@@ -998,7 +831,7 @@ public:
             return result;
         }
         ALOGI("Successfully set RSSI monitoring");
-        result = registerVendorHandler(GOOGLE_OUI, GOOGLE_RSSI_MONITOR_EVENT);
+        registerVendorHandler(GOOGLE_OUI, GOOGLE_RSSI_MONITOR_EVENT);
 
 
         if (result < 0) {
@@ -1080,8 +913,6 @@ class AndroidPktFilterCommand : public WifiCommand {
                     mVersion(version), mMaxLen(max_len),
                     mReqType(GET_APF_CAPABILITIES)
         {
-            mProgram = NULL;
-            mProgramLen = 0;
         }
 
         AndroidPktFilterCommand(wifi_interface_handle handle,
@@ -1090,8 +921,6 @@ class AndroidPktFilterCommand : public WifiCommand {
                     mProgram(program), mProgramLen(len),
                     mReqType(SET_APF_PROGRAM)
         {
-            mVersion = NULL;
-            mMaxLen = NULL;
         }
 
     int createRequest(WifiRequest& request) {
@@ -1113,21 +942,20 @@ class AndroidPktFilterCommand : public WifiCommand {
         NULL_CHECK_RETURN(program, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
         int result = request.create(GOOGLE_OUI, APF_SUBCMD_SET_FILTER);
         if (result < 0) {
-            delete[] program;
             return result;
         }
 
         nlattr *data = request.attr_start(NL80211_ATTR_VENDOR_DATA);
         result = request.put_u32(APF_ATTRIBUTE_PROGRAM_LEN, mProgramLen);
         if (result < 0) {
-            goto exit;
+            return result;
         }
         memcpy(program, mProgram, mProgramLen);
         result = request.put(APF_ATTRIBUTE_PROGRAM, program, mProgramLen);
         if (result < 0) {
-            goto exit;
+            return result;
         }
-exit:   request.attr_end(data);
+        request.attr_end(data);
         delete[] program;
         return result;
     }
@@ -1249,7 +1077,8 @@ private:
 public:
     GetFeatureSetCommand(wifi_interface_handle handle, int feature, feature_set *set,
          feature_set set_matrix[], int *size, int max_size)
-        : WifiCommand("GetFeatureSetCommand", handle, 0) {
+        : WifiCommand("GetFeatureSetCommand", handle, 0)
+    {
         feature_type = feature;
         fset = set;
         feature_matrix = set_matrix;
@@ -1336,41 +1165,6 @@ protected:
 
 };
 
-class SetLatencyModeCommand : public WifiCommand {
-private:
-    u32 mLatencyMode;
-public:
-    SetLatencyModeCommand(wifi_interface_handle handle, u32 LatencyMode)
-        : WifiCommand("SetLatencyModeCommand", handle, 0) {
-            mLatencyMode = LatencyMode;
-    }
-
-    virtual int create() {
-        int ret;
-
-        /* Check for invalid latency Mode */
-        if ((mLatencyMode != WIFI_LATENCY_MODE_NORMAL) &&
-            (mLatencyMode != WIFI_LATENCY_MODE_LOW)) {
-            ALOGE("SetLatencyModeCommand: Invalid mode: %d", mLatencyMode);
-            return WIFI_ERROR_UNKNOWN;
-        }
-
-        ret = mMsg.create(GOOGLE_OUI, WIFI_SUBCMD_SET_LATENCY_MODE);
-        if (ret < 0) {
-            ALOGE("Can't create message to send to driver - %d", ret);
-            return ret;
-        }
-
-        nlattr *data = mMsg.attr_start(NL80211_ATTR_VENDOR_DATA);
-        ret = mMsg.put_u32(ANDR_WIFI_ATTRIBUTE_LATENCY_MODE, mLatencyMode);
-        if (ret < 0) {
-            return ret;
-        }
-
-        mMsg.attr_end(data);
-        return WIFI_SUCCESS;
-    }
-};
 static int wifi_get_multicast_id(wifi_handle handle, const char *name, const char *group)
 {
     GetMulticastIdCommand cmd(handle, name, group);
@@ -1385,7 +1179,7 @@ static int wifi_get_multicast_id(wifi_handle handle, const char *name, const cha
 
 static bool is_wifi_interface(const char *name)
 {
-    if (strncmp(name, "wlan", 4) != 0 && strncmp(name, "swlan", 5) != 0 && strncmp(name, "p2p", 3) != 0) {
+    if (strncmp(name, "wlan", 4) != 0 && strncmp(name, "p2p", 3) != 0) {
         /* not a wifi interface; ignore it */
         return false;
     } else {
@@ -1395,7 +1189,7 @@ static bool is_wifi_interface(const char *name)
 
 static int get_interface(const char *name, interface_info *info)
 {
-    strlcpy(info->name, name, sizeof(info->name));
+    strcpy(info->name, name);
     info->id = if_nametoindex(name);
     // ALOGI("found an interface : %s, id = %d", name, info->id);
     return WIFI_SUCCESS;
@@ -1430,11 +1224,6 @@ wifi_error wifi_init_interfaces(wifi_handle handle)
         return WIFI_ERROR_UNKNOWN;
 
     info->interfaces = (interface_info **)malloc(sizeof(interface_info *) * n);
-    if (!info->interfaces) {
-        info->num_interfaces = 0;
-        closedir(d);
-        return WIFI_ERROR_OUT_OF_MEMORY;
-    }
 
     int i = 0;
     while ((de = readdir(d))) {
@@ -1442,12 +1231,6 @@ wifi_error wifi_init_interfaces(wifi_handle handle)
             continue;
         if (is_wifi_interface(de->d_name)) {
             interface_info *ifinfo = (interface_info *)malloc(sizeof(interface_info));
-            if (!ifinfo) {
-                free(info->interfaces);
-                info->num_interfaces = 0;
-                closedir(d);
-                return WIFI_ERROR_OUT_OF_MEMORY;
-            }
             if (get_interface(de->d_name, ifinfo) != WIFI_SUCCESS) {
                 free(ifinfo);
                 continue;
@@ -1474,35 +1257,19 @@ wifi_error wifi_get_ifaces(wifi_handle handle, int *num, wifi_interface_handle *
     return WIFI_SUCCESS;
 }
 
-wifi_interface_handle wifi_get_wlan_interface(wifi_handle info, wifi_interface_handle *ifaceHandles, int numIfaceHandles)
-{
-    char buf[EVENT_BUF_SIZE];
-    wifi_interface_handle wlan0Handle;
-    wifi_error res = wifi_get_ifaces((wifi_handle)info, &numIfaceHandles, &ifaceHandles);
-    if (res < 0) {
-        return NULL;
-    }
-    for (int i = 0; i < numIfaceHandles; i++) {
-        if (wifi_get_iface_name(ifaceHandles[i], buf, sizeof(buf)) == WIFI_SUCCESS) {
-            if (strcmp(buf, "wlan0") == 0) {
-                ALOGI("found interface %s\n", buf);
-                wlan0Handle = ifaceHandles[i];
-                return wlan0Handle;
-            }
-        }
-    }
-    return NULL;
-}
 wifi_error wifi_get_iface_name(wifi_interface_handle handle, char *name, size_t size)
 {
     interface_info *info = (interface_info *)handle;
-    strncpy(name, info->name, (IFNAMSIZ));
-    name[IFNAMSIZ - 1] = '\0';
+    strcpy(name, info->name);
     return WIFI_SUCCESS;
 }
 
 wifi_error wifi_get_supported_feature_set(wifi_interface_handle handle, feature_set *set)
 {
+    if (check_wifi_chip_type() == RK912_WIFI) {
+        *set = 0;
+        return WIFI_SUCCESS;
+    }
     GetFeatureSetCommand command(handle, ANDR_WIFI_ATTRIBUTE_NUM_FEATURE_SET, set, NULL, NULL, 1);
     return (wifi_error) command.requestResponse();
 }
@@ -1517,9 +1284,12 @@ wifi_error wifi_get_concurrency_matrix(wifi_interface_handle handle, int set_siz
 
 wifi_error wifi_set_scanning_mac_oui(wifi_interface_handle handle, oui scan_oui)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        return WIFI_SUCCESS;
+    }
+
     SetPnoMacAddrOuiCommand command(handle, scan_oui);
     return (wifi_error)command.start();
-
 }
 
 wifi_error wifi_set_nodfs_flag(wifi_interface_handle handle, u32 nodfs)
@@ -1530,6 +1300,10 @@ wifi_error wifi_set_nodfs_flag(wifi_interface_handle handle, u32 nodfs)
 
 wifi_error wifi_set_country_code(wifi_interface_handle handle, const char *country_code)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        return WIFI_SUCCESS;
+    }
+
     SetCountryCodeCommand command(handle, country_code);
     return (wifi_error) command.requestResponse();
 }
@@ -1537,7 +1311,15 @@ wifi_error wifi_set_country_code(wifi_interface_handle handle, const char *count
 static wifi_error wifi_start_rssi_monitoring(wifi_request_id id, wifi_interface_handle
                         iface, s8 max_rssi, s8 min_rssi, wifi_rssi_event_handler eh)
 {
+    static char state[PROPERTY_VALUE_MAX];
+
     ALOGD("Start RSSI monitor %d", id);
+    property_get("vendor.wifi.state", state, "disconnected");
+    if (0 == strcmp (state, "disconnected")) {
+	ALOGD("Start RSSI monitor WIFI_ERROR_INVALID_ARGS");
+	return WIFI_ERROR_INVALID_ARGS;
+    }
+
     wifi_handle handle = getWifiHandle(iface);
     SetRSSIMonitorCommand *cmd = new SetRSSIMonitorCommand(id, iface, max_rssi, min_rssi, eh);
     NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
@@ -1552,13 +1334,18 @@ static wifi_error wifi_start_rssi_monitoring(wifi_request_id id, wifi_interface_
         cmd->releaseRef();
         return result;
     }
-    return result;
+    return WIFI_ERROR_UNKNOWN;
 }
 
 static wifi_error wifi_stop_rssi_monitoring(wifi_request_id id, wifi_interface_handle iface)
 {
+    static char state[PROPERTY_VALUE_MAX];
     ALOGD("Stopping RSSI monitor");
-
+    property_get("vendor.wifi.state", state, "disconnected");
+    if (0 == strcmp (state, "disconnected")) {
+	ALOGD("Stopping RSSI monitor WIFI_ERROR_INVALID_ARGS");
+	return WIFI_ERROR_INVALID_ARGS;
+    }
     if(id == -1) {
         wifi_rssi_event_handler handler;
         s8 max_rssi = 0, min_rssi = 0;
@@ -1571,12 +1358,17 @@ static wifi_error wifi_stop_rssi_monitoring(wifi_request_id id, wifi_interface_h
         cmd->releaseRef();
         return WIFI_SUCCESS;
     }
-    return wifi_cancel_cmd(id, iface);
+	wifi_cancel_cmd(id, iface);
+    return WIFI_ERROR_UNKNOWN;
 }
 
 static wifi_error wifi_get_packet_filter_capabilities(wifi_interface_handle handle,
         u32 *version, u32 *max_len)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI) {
+        return WIFI_SUCCESS;
+    }
+
     ALOGD("Getting APF capabilities, halHandle = %p\n", handle);
     AndroidPktFilterCommand *cmd = new AndroidPktFilterCommand(handle, version, max_len);
     NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
@@ -1601,92 +1393,12 @@ static wifi_error wifi_set_packet_filter(wifi_interface_handle handle,
 
 static wifi_error wifi_configure_nd_offload(wifi_interface_handle handle, u8 enable)
 {
-    SetNdoffloadCommand command(handle, enable);
-    return (wifi_error) command.requestResponse();
-}
-wifi_error wifi_set_latency_mode(wifi_interface_handle handle, wifi_latency_mode mode)
-{
-    ALOGD("Setting Wifi Latency mode, halHandle = %p LatencyMode = %d\n", handle, mode);
-    SetLatencyModeCommand command(handle, mode);
-    return (wifi_error) command.requestResponse();
-}
-
-/////////////////////////////////////////////////////////////////////////
-class TxPowerScenario : public WifiCommand {
-    wifi_power_scenario mScenario;
-public:
-    // constructor for tx power scenario setting
-    TxPowerScenario(wifi_interface_handle handle, wifi_power_scenario scenario)
-    : WifiCommand("TxPowerScenario", handle, 0), mScenario(scenario)
-    {
-        mScenario = scenario;
-    }
-
-    // constructor for tx power scenario resetting
-    TxPowerScenario(wifi_interface_handle handle)
-    : WifiCommand("TxPowerScenario", handle, 0)
-    {
-        mScenario = WIFI_POWER_SCENARIO_DEFAULT;
-    }
-
-    int createRequest(WifiRequest& request, int subcmd, wifi_power_scenario mScenario) {
-        int result = request.create(GOOGLE_OUI, subcmd);
-        if (result < 0) {
-            return result;
-        }
-
-        if ((mScenario <= WIFI_POWER_SCENARIO_INVALID) ||
-           (mScenario > WIFI_POWER_SCENARIO_ON_BODY_BT)) {
-            ALOGE("Unsupported tx power value:%d\n", mScenario);
-            return WIFI_ERROR_NOT_SUPPORTED;
-        }
-
-        nlattr *data = request.attr_start(NL80211_ATTR_VENDOR_DATA);
-        result = request.put_s8(ANDR_WIFI_ATTRIBUTE_TX_POWER_SCENARIO, mScenario);
-        if (result < 0) {
-            ALOGE("Failed to put tx power scenario request; result = %d", result);
-            return result;
-        }
-        request.attr_end(data);
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
         return WIFI_SUCCESS;
     }
 
-    int start(wifi_power_scenario mScenario) {
-        WifiRequest request(familyId(), ifaceId());
-        int result = createRequest(request, WIFI_SUBCMD_TX_POWER_SCENARIO, mScenario);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("failed to create request; result = %d", result);
-            return result;
-        }
-
-        result = requestResponse(request);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("failed to send tx power scenario; result = %d", result);
-        }
-        return result;
-    }
-protected:
-    virtual int handleResponse(WifiEvent& reply) {
-        ALOGD("Request complete!");
-        /* Nothing to do on response! */
-        return NL_SKIP;
-    }
-};
-
-
-wifi_error wifi_select_tx_power_scenario(wifi_interface_handle handle, wifi_power_scenario scenario)
-{
-    ALOGE("wifi_select_tx_power_scenario");
-    TxPowerScenario command(handle);
-    return (wifi_error)command.start(scenario);
-}
-
-wifi_error wifi_reset_tx_power_scenario(wifi_interface_handle handle)
-{
-    wifi_power_scenario scenario = WIFI_POWER_SCENARIO_DEFAULT;
-    ALOGE("wifi_reset_tx_power_scenario");
-    TxPowerScenario command(handle);
-    return (wifi_error)command.start(scenario);
+    SetNdoffloadCommand command(handle, enable);
+    return (wifi_error) command.requestResponse();
 }
 
 /////////////////////////////////////////////////////////////////////////////

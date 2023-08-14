@@ -61,7 +61,7 @@ public class OemUnlockPreferenceController extends DeveloperOptionsPreferenceCon
         super(context);
 
         if (!TextUtils.equals(SystemProperties.get(OEM_UNLOCK_SUPPORTED_KEY, UNSUPPORTED),
-                SUPPORTED)) {
+                SUPPORTED) || TextUtils.isEmpty(SystemProperties.get("ro.frp.pst"))) {
             mOemLockManager = null;
             Log.w(TAG, "oem_unlock not supported.");
         } else {

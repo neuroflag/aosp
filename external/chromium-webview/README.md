@@ -1,19 +1,96 @@
-Building the Chromium-based WebView in AOSP is no longer supported or required.
-WebView can now be built entirely from the Chromium source code.
+Building the Chromium-based WebView in AOSP is no longer supported. WebView can
+now be built entirely from the Chromium source code.
 
-Docs on how to build WebView from Chromium for use in AOSP are available here:
-https://chromium.googlesource.com/chromium/src/+/HEAD/android_webview/docs/aosp-system-integration.md
+General instructions for building WebView from Chromium:
+https://www.chromium.org/developers/how-tos/build-instructions-android-webview
 
-For questions about building WebView, please contact our mailing list:
+------
+
+ARM/ARM64
+
+The prebuilt libwebviewchromium.so included in these APKs is built from Chromium
+release tag 96.0.4664.104, using the GN build tool. To match our build settings, set:
+
+target_os = "android"
+is_debug = false
+is_official_build = true
+is_chrome_branded = false
+use_official_google_api_keys = false
+ffmpeg_branding = "Chrome"
+proprietary_codecs = true
+enable_resource_allowlist_generation = false
+enable_remoting = false
+is_component_build = false
+symbol_level = 0
+enable_nacl = false
+blink_symbol_level = 0
+webview_devui_show_icon = false
+dfmify_dev_ui = false
+disable_autofill_assistant_dfm = true
+disable_tab_ui_dfm = true
+enable_gvr_services = false
+disable_fieldtrial_testing_config = true
+android_default_version_name = "96.0.4664.104"
+android_default_version_code = "4664104$$"
+
+$$ depends on device ARCH
+(00=arm, 50=arm64, 10=x86, 60=x64)
+
+in your GN argument file before building.
+
+------
+
+X86/X86_64
+
+The prebuilt libwebviewchromium.so included in these APKs is built from Chromium
+release tag 93.0.4577.82, using the GN build tool. To match our build settings, set:
+
+target_os = "android"
+is_debug = false
+is_official_build = true
+is_chrome_branded = false
+use_official_google_api_keys = false
+ffmpeg_branding = "Chrome"
+proprietary_codecs = true
+enable_resource_allowlist_generation = false
+enable_remoting = false
+is_component_build = false
+symbol_level = 0
+enable_nacl = false
+blink_symbol_level = 0
+webview_devui_show_icon = false
+dfmify_dev_ui = false
+disable_autofill_assistant_dfm = true
+disable_tab_ui_dfm = true
+enable_gvr_services = false
+fieldtrial_testing_like_official_build = true
+android_default_version_name = "93.0.4577.82"
+android_default_version_code = "4577082$$"
+
+$$ depends on device ARCH
+(00=arm, 50=arm64, 10=x86, 60=x64)
+
+in your GN argument file before building.
+
+------
+
+Replace webview icon:
+
+From the chromium/src directory:
+
+mkdir -p android_webview/apk/java/res/drawable-xxxhdpi
+cp chrome/android/java/res_chromium/mipmap-mdpi/app_icon.png android_webview/apk/java/res/drawable-mdpi/icon_webview.png
+cp chrome/android/java/res_chromium/mipmap-hdpi/app_icon.png android_webview/apk/java/res/drawable-hdpi/icon_webview.png
+cp chrome/android/java/res_chromium/mipmap-xhdpi/app_icon.png android_webview/apk/java/res/drawable-xhdpi/icon_webview.png
+cp chrome/android/java/res_chromium/mipmap-xxhdpi/app_icon.png android_webview/apk/java/res/drawable-xxhdpi/icon_webview.png
+cp chrome/android/java/res_chromium/mipmap-xxxhdpi/app_icon.png android_webview/apk/java/res/drawable-xxxhdpi/icon_webview.png
+
+------
+
+Extra patches:
+patches/chromium-theme-color.patch: Provides a callback when a theme color is set by the page
+
+------
+
+For questions about building WebView, please see
 https://groups.google.com/a/chromium.org/forum/#!forum/android-webview-dev
-
----
-
-The prebuilt APKs provided here are built from Chromium upstream sources; you
-should check the commit message to see the version number for a particular
-prebuilt. The version number is formatted like "12.0.3456.789" and matches the
-tag in the Chromium repository it was built from.
-
-If you want to build your own WebView, you should generally build the latest
-stable version, not the version published here: newer versions have important
-security and stability improvements.

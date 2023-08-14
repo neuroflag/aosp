@@ -162,6 +162,7 @@ public class CaptureIntentModule extends CameraModule {
     @Override
     public void destroy() {
         // Never called. Do nothing here.
+        mResourceConstructed.get().close();
     }
 
     @Override
@@ -305,4 +306,22 @@ public class CaptureIntentModule extends CameraModule {
             mStateMachine.processEvent(new EventOnSurfaceTextureUpdated());
         }
     };
+
+    @Override
+    public void onOrientationChanged(int orientation) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void onNonDecorWindowSizeChanged() {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void onShutterButtonLongClickRelease() {
+        // TODO Auto-generated method stub
+        
+    }
 }

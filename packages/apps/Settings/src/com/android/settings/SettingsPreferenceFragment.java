@@ -24,6 +24,7 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -41,6 +42,7 @@ import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceScreen;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 
 import com.android.settings.core.InstrumentedPreferenceFragment;
 import com.android.settings.core.instrumentation.InstrumentedDialogFragment;
@@ -199,6 +201,123 @@ public abstract class SettingsPreferenceFragment extends InstrumentedPreferenceF
     public void onResume() {
         super.onResume();
         highlightPreferenceIfNeeded();
+        restoreRecyclerViewFocus();
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        saveRecyclerViewFocus();
+
+    }
+
+    public void findRecyclerViewFocus()
+    {
+        RecyclerView mRecyclerView = getListView();
+        if(mRecyclerView != null)
+        {
+            boolean hasChildFocus = (mRecyclerView.getFocusedChild() != null);
+            if(!hasChildFocus ){
+                 mRecyclerView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Handler mHandler = new Handler();
+                        mHandler.postDelayed(new Runnable() {
+                                     @Override
+                                     public void run() {
+                                        // TODO Auto-generated method stub
+                                        for(int i = 0; i < mRecyclerView.getChildCount() ; i ++){
+                                            ViewHolder mTmpHolder = mRecyclerView.findViewHolderForPosition(i);
+                                            if(mTmpHolder != null && mTmpHolder.itemView != null )
+                                            {
+                                                if(mTmpHolder.itemView.isFocusable()){
+                                                    mTmpHolder.itemView.requestFocus();
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                        }, 200);
+                    }
+                });
+            }
+        }
+    }
+
+    int recyclerview_focus_child_pos = -1;
+    public void saveRecyclerViewFocus()
+    {
+        RecyclerView mRecyclerView = getListView();
+        recyclerview_focus_child_pos = -1;
+        if(mRecyclerView != null)
+        {
+            boolean hasChildFocus = (mRecyclerView.getFocusedChild() != null);
+            mRecyclerView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Handler mHandler = new Handler();
+                        mHandler.postDelayed(new Runnable() {
+                                     @Override
+                                     public void run() {
+                                        // TODO Auto-generated method stub
+                                       for(int i = 0; i < mRecyclerView.getChildCount() ; i ++){
+                                            ViewHolder mTmpHolder = mRecyclerView.findViewHolderForPosition(i);
+                                            if(mTmpHolder != null && mTmpHolder.itemView != null )
+                                            {
+                                                if(mTmpHolder.itemView.isFocusable() && mTmpHolder.itemView.hasFocus()){
+                                                    recyclerview_focus_child_pos = mTmpHolder.getPosition();
+                                                }
+                                            }
+                                        }
+                                    }
+                         }, 200);
+
+            }});
+        }
+    }
+
+    public void restoreRecyclerViewFocus(){
+        RecyclerView mRecyclerView = getListView();
+        if(mRecyclerView != null)
+        {
+            mRecyclerView.setFocusable(false);
+            mRecyclerView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Handler mHandler = new Handler();
+                        mHandler.postDelayed(new Runnable() {
+                                     @Override
+                                     public void run() {
+                                        // TODO Auto-generated method stub
+                                        // 尝试恢复焦点，若失败则将焦点定在第一个可focus的对象上面
+                                       if(recyclerview_focus_child_pos != -1 
+                                            && recyclerview_focus_child_pos < mRecyclerView.getChildCount()){
+
+                                             ViewHolder mTmpHolder = mRecyclerView.findViewHolderForPosition(recyclerview_focus_child_pos);
+                                             recyclerview_focus_child_pos = -1;
+                                            if(mTmpHolder != null && mTmpHolder.itemView != null ){
+                                                if(mTmpHolder.itemView.isFocusable() ){
+                                                    mTmpHolder.itemView.requestFocus();
+                                                    return;
+                                                }
+                                            }
+                                       }
+                                       for(int i = 0; i < mRecyclerView.getChildCount() ; i ++){
+                                            ViewHolder mTmpHolder = mRecyclerView.findViewHolderForPosition(i);
+                                            if(mTmpHolder != null && mTmpHolder.itemView != null )
+                                            {
+                                                    if(mTmpHolder.itemView.isFocusable()){
+                                                        mTmpHolder.itemView.requestFocus();
+                                                        break;
+                                                    }
+                                            }
+                                        }
+                                    }
+                         }, 200);
+
+            }});
+        }
+
     }
 
     @Override

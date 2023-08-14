@@ -180,6 +180,8 @@ public class Settings extends SettingsActivity {
     }
 
     public static class ApnSettingsActivity extends SettingsActivity { /* empty */ }
+    public static class EthernetSettingsActivity extends SettingsActivity { /* empty */ }
+    public static class EthernetSettingsActivityExt extends SettingsActivity { /* empty */ }
     public static class WifiCallingSettingsActivity extends SettingsActivity { /* empty */ }
     public static class MemorySettingsActivity extends SettingsActivity { /* empty */ }
     public static class AppMemoryUsageActivity extends SettingsActivity { /* empty */ }
@@ -239,5 +241,7 @@ public class Settings extends SettingsActivity {
      * Activity for MediaControlsSettings
      */
     public static class MediaControlsSettingsActivity extends SettingsActivity {}
+    public static class ScreenshotSettingsActivity extends SettingsActivity { /* empty */ }
 
+    public static class HdmiSettingsActivity extends SettingsActivity {}
 }

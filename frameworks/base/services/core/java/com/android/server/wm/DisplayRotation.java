@@ -315,6 +315,14 @@ public class DisplayRotation {
         }
         mDemoHdmiRotationLock = SystemProperties.getBoolean("persist.demo.hdmirotationlock", false);
 
+        if("true".equals(SystemProperties.get("ro.vendor.hdmirotationlock"))){
+            Slog.d(TAG,"force set hdmi rotation-----");
+            int rotation=Integer.valueOf(SystemProperties.get("ro.surface_flinger.primary_display_orientation","ORIENTATION_0").split("_")[1])/90;
+            mDemoHdmiRotation=(4-rotation)%4;
+            //mDemoHdmiRotation= Surface.ROTATION_0;
+            mDemoHdmiRotationLock=true;
+        }
+
         // For demo purposes, allow the rotation of the remote display to be controlled.
         // By default, remote display locks rotation to landscape.
         if ("portrait".equals(SystemProperties.get("persist.demo.remoterotation"))) {
@@ -336,6 +344,11 @@ public class DisplayRotation {
                 // $ adb shell setprop config.override_forced_orient true
                 // $ adb shell wm size reset
                 && !"true".equals(SystemProperties.get("config.override_forced_orient"));
+
+         if("2".equals(SystemProperties.get("persist.sys.forced_orient","0"))
+            &&"box".equals(SystemProperties.get("ro.target.product","unknow"))){
+               mDefaultFixedToUserRotation = true;
+        }
     }
 
     void applyCurrentRotation(@Surface.Rotation int rotation) {
@@ -366,6 +379,9 @@ public class DisplayRotation {
         mLastOrientation = newOrientation;
         if (newOrientation != mCurrentAppOrientation) {
             mCurrentAppOrientation = newOrientation;
+            String rot = SystemProperties.get("persist.sys.app.rotation", "middle_port");
+            if (rot.equals("force_land") && "box".equals(SystemProperties.get("ro.target.product")))
+                mCurrentAppOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
             if (isDefaultDisplay) {
                 updateOrientationListenerLw();
             }
@@ -780,7 +796,7 @@ public class DisplayRotation {
         if (mFixedToUserRotation == fixedToUserRotation) {
             return;
         }
-
+        SystemProperties.set("persist.sys.forced_orient",fixedToUserRotation+"");
         mFixedToUserRotation = fixedToUserRotation;
         mDisplayWindowSettings.setFixedToUserRotation(mDisplayContent, fixedToUserRotation);
         mService.updateRotation(true /* alwaysSendConfiguration */,
@@ -1183,6 +1199,11 @@ public class DisplayRotation {
             preferredRotation = -1;
         }
 
+        String rot = SystemProperties.get("persist.sys.app.rotation", "middle_port");
+        if (rot.equals("force_land") && "box".equals(SystemProperties.get("ro.target.product"))) {
+            Slog.v(TAG, "asx force_land :" + mLandscapeRotation);
+            return mLandscapeRotation;
+        }
         switch (orientation) {
             case ActivityInfo.SCREEN_ORIENTATION_PORTRAIT:
                 // Return portrait unless overridden.

@@ -28,6 +28,8 @@ subsystem sound
 /dev/zero                 0666   root       root
 /dev/full                 0666   root       root
 /dev/ptmx                 0666   root       root
+/dev/vmdrm0               0666   root       root
+/dev/fb_firefly  		  0666   root       root
 /dev/tty                  0666   root       root
 /dev/random               0666   root       root
 /dev/urandom              0666   root       root

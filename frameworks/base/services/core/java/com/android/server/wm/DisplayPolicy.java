@@ -129,6 +129,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import com.android.internal.statusbar.IStatusBarService;
 
 import android.Manifest.permission;
 import android.annotation.NonNull;
@@ -155,6 +156,8 @@ import android.os.Message;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.util.ArraySet;
 import android.util.IntArray;
 import android.util.Pair;
@@ -540,6 +543,9 @@ public class DisplayPolicy {
                                 requestTransientBars(mNavigationBar);
                             }
                             checkAltBarSwipeForTransientBars(ALT_BAR_BOTTOM);
+
+                            //firefly_modify_songjf, add bar interface
+                            addBar();
                         }
                     }
 
@@ -686,6 +692,32 @@ public class DisplayPolicy {
         }
         if (mExtraNavBarAlt != null && mExtraNavBarAltPosition == pos) {
             requestTransientBars(mExtraNavBarAlt);
+        }
+    }
+
+    //firefly_modify_songjf, add bar interface
+    public void addBar() {
+        try {
+            IStatusBarService statusbar = getStatusBarService();
+            if (statusbar != null) {
+                statusbar.addBar();
+            }
+        } catch (RemoteException e) {
+            Slog.e(TAG, "RemoteException when add Bar", e);
+            // re-acquire status bar service next time it is needed.
+            mStatusBarService = null;
+        }
+    }
+
+    final Object mServiceAquireLock = new Object();
+    IStatusBarService mStatusBarService;
+    IStatusBarService getStatusBarService() {
+        synchronized (mServiceAquireLock) {
+            if (mStatusBarService == null) {
+                mStatusBarService = IStatusBarService.Stub.asInterface(
+                        ServiceManager.getService("statusbar"));
+            }
+            return mStatusBarService;
         }
     }
 

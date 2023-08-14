@@ -382,6 +382,10 @@ on init
     chmod 0660 /sys/power/wake_lock
     chmod 0660 /sys/power/wake_unlock
 
+    chmod 0666 /oem
+    restorecon_recursive /oem
+    mount ext4 /dev/block/by-name/oem /oem wait ro noatime nodiratime
+
     # Start logd before any other services run to ensure we capture all of their logs.
     start logd
     # Start lmkd before any other services run so that it can register them

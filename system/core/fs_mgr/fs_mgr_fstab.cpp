@@ -34,7 +34,6 @@
 #include <android-base/stringprintf.h>
 #include <android-base/strings.h>
 #include <libgsi/libgsi.h>
-
 #include "fs_mgr_priv.h"
 
 using android::base::EndsWith;
@@ -73,6 +72,7 @@ FlagList kMountFlagsList[] = {
         {"slave", MS_SLAVE},
         {"shared", MS_SHARED},
         {"defaults", 0},
+        {"dirsync", MS_DIRSYNC},
 };
 
 off64_t CalculateZramSize(int percentage) {
@@ -520,7 +520,6 @@ err:
  */
 std::set<std::string> ExtraBootDevices(const Fstab& fstab) {
     std::set<std::string> boot_devices;
-
     for (const auto& entry : fstab) {
         std::string blk_device = entry.blk_device;
         // Skips blk_device that doesn't conform to the format.
@@ -777,7 +776,6 @@ bool ReadDefaultFstab(Fstab* fstab) {
     } else {  // normal boot
         default_fstab_path = GetFstabPath();
     }
-
     Fstab default_fstab;
     if (!default_fstab_path.empty()) {
         ReadFstabFromFile(default_fstab_path, &default_fstab);
@@ -828,18 +826,81 @@ std::set<std::string> GetBootDevices() {
     if (fs_mgr_get_boot_config_from_kernel_cmdline("boot_devices", &value) ||
         ReadDtFile(dt_file_name, &value)) {
         auto boot_devices = Split(value, ",");
+        for(int i=0;i<boot_devices.size();i++){
+            //LOG(INFO) <<"[debug]["<<__FILE__<<"-"<<__func__<<"-"<<__LINE__<<"]"<<boot_devices.at(i)<<std::endl;
+        }
         return std::set<std::string>(boot_devices.begin(), boot_devices.end());
     }
-
     // Fallback to extract boot devices from fstab.
     Fstab fstab;
     if (!ReadDefaultFstab(&fstab)) {
         return {};
     }
-
     return ExtraBootDevices(fstab);
 }
+bool GetBootTypeMultiDevice() {
+    // First check the kernel commandline
+    std::string value = "none";
+    bool flag = false;
+    fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("storageboot.type", &value);
+    std::string::size_type pos = value.find("multiboot");
+    if(pos != std::string::npos){
+        flag=true;
+    } 
+    return flag;
+}
+bool GetBootTypeVirtualDisk() {
+    // First check the kernel commandline
+    std::string value = "none";
+    bool flag = false;
+    fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("virtual_lba_count", &value);
+    if(strtoll(value.c_str(), nullptr, 10) != 0){
+        flag=true;
+    } 
+    return flag;
+}
+bool GetVirtualDiskInfo(std::string* virtual_offset,std::string* virtual_size){
+    if(!fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("virtual_lba_offset", virtual_offset)) return false;
+    if(!fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("virtual_lba_count", virtual_size)) return false;
+    
+    return true;
+}
+bool GetBootTypeVirtualShareDisk() {
+    // First check the kernel commandline
+    std::string value = "none";
+    bool flag = false;
+    fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("shared_lba_count", &value);
+    if(strtoll(value.c_str(), nullptr, 10) != 0){
+        flag=true;
+    } 
+    return flag;
+}
+bool GetVirtualShareDiskInfo(std::string* share_virtual_offset,std::string* share_virtual_size){
+    if(!fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("shared_lba_offset", share_virtual_offset)) return false;
+    if(!fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("shared_lba_count", share_virtual_size)) return false;
+    
+    return true;
+}
+std::string GetBootDevicesNode() {
+    // First check the kernel commandline
+    std::string value = "none";
+    std::string subnode = "none";
+    fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring("storagenode", &value);
+    std::string::size_type pos = value.find("@");
+    if(pos != std::string::npos)  
+    {
+        subnode = value.substr(pos+1,value.size());
+    } 
+    return subnode;
+}
+std::string GetAndroidBootStoragemedia(){
+    std::string value="none";
+    if (fs_mgr_get_boot_config_from_kernel_cmdline("storagemedia", &value)){
+       // LOG(INFO)<<"debug " <<" androidboot.storagemedia " <<value;
+    }
+    return value;
 
+}
 std::string GetVerityDeviceName(const FstabEntry& entry) {
     std::string base_device;
     if (entry.mount_point == "/") {

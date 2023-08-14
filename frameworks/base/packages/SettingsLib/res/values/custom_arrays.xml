@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+           xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <!-- Arrays for root access capability -->
+    <string-array name="root_access_entries" translatable="false">
+        <item>@string/root_access_none</item>
+        <item>@string/root_access_apps</item>
+        <item>@string/root_access_adb</item>
+        <item>@string/root_access_all</item>
+    </string-array>
+
+    <string-array name="root_access_values" translatable="false">
+        <item>0</item>
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+
+    <string-array name="root_access_entries_adb" translatable="false">
+        <item>@string/root_access_none</item>
+        <item>@string/root_access_adb</item>
+    </string-array>
+
+    <string-array name="root_access_values_adb" translatable="false">
+        <item>0</item>
+        <item>2</item>
+    </string-array>
+</resources>

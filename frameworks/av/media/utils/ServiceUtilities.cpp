@@ -40,6 +40,18 @@ static const String16 sAndroidPermissionRecordAudio("android.permission.RECORD_A
 static const String16 sModifyPhoneState("android.permission.MODIFY_PHONE_STATE");
 static const String16 sModifyAudioRouting("android.permission.MODIFY_AUDIO_ROUTING");
 
+// A trusted calling UID may specify the client UID as part of a binder interface call.
+// otherwise the calling UID must be equal to the client UID.
+static bool isTrustedCallingUid(uid_t uid) {
+    switch (uid) {
+    case AID_MEDIA:
+    case AID_AUDIOSERVER:
+        return true;
+    default:
+        return false;
+    }
+}
+
 static String16 resolveCallingPackage(PermissionController& permissionController,
         const String16& opPackageName, uid_t uid) {
     if (opPackageName.size() > 0) {
@@ -77,6 +89,10 @@ static bool checkRecordingInternal(const String16& opPackageName, pid_t pid,
     const bool ok = permissionController.checkPermission(sAndroidPermissionRecordAudio, pid, uid);
     if (!ok) {
         ALOGE("Request requires %s", String8(sAndroidPermissionRecordAudio).c_str());
+        if(isTrustedCallingUid(uid)) {
+            ALOGD("Rockchip recordingAllowed true.");
+            return true;
+        }
         return false;
     }
 
@@ -141,6 +157,10 @@ bool captureAudioOutputAllowed(pid_t pid, uid_t uid) {
     static const String16 sCaptureAudioOutput("android.permission.CAPTURE_AUDIO_OUTPUT");
     bool ok = PermissionCache::checkPermission(sCaptureAudioOutput, pid, uid);
     if (!ok) ALOGV("Request requires android.permission.CAPTURE_AUDIO_OUTPUT");
+    if(isTrustedCallingUid(uid)) {
+        ALOGD("Rockchip captureAudioOutputAllowed true.");
+        return true;
+    }
     return ok;
 }
 

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "APM::AudioPolicyEngine"
+#define LOG_TAG "APM_AudioPolicyEngine"
 //#define LOG_NDEBUG 0
 
 //#define VERY_VERBOSE_LOGGING
@@ -421,9 +421,14 @@ DeviceVector Engine::getDevicesForStrategyInt(legacy_strategy strategy,
         }
         DeviceVector devices3;
         if (strategy == STRATEGY_MEDIA) {
+            // add by firefly
+            if (outputs.isA2dpSupported()) {
+            devices3 = availableOutputDevices.getDevicesFromTypes({AUDIO_DEVICE_OUT_BLUETOOTH_A2DP});
+            } else {
             // ARC, SPDIF and AUX_LINE can co-exist with others.
             devices3 = availableOutputDevices.getDevicesFromTypes({
-                    AUDIO_DEVICE_OUT_HDMI_ARC, AUDIO_DEVICE_OUT_SPDIF, AUDIO_DEVICE_OUT_AUX_LINE});
+                    AUDIO_DEVICE_OUT_HDMI_ARC, AUDIO_DEVICE_OUT_SPDIF, AUDIO_DEVICE_OUT_AUX_LINE,AUDIO_DEVICE_OUT_WIRED_HEADPHONE,AUDIO_DEVICE_OUT_AUX_DIGITAL,AUDIO_DEVICE_OUT_SPEAKER});
+            }
         }
 
         devices2.add(devices3);
@@ -572,8 +577,8 @@ sp<DeviceDescriptor> Engine::getDeviceForInputSource(audio_source_t inputSource)
     case AUDIO_SOURCE_CAMCORDER:
         // For a device without built-in mic, adding usb device
         device = availableDevices.getFirstExistingDevice({
-                AUDIO_DEVICE_IN_BACK_MIC, AUDIO_DEVICE_IN_BUILTIN_MIC,
-                AUDIO_DEVICE_IN_USB_DEVICE});
+                AUDIO_DEVICE_IN_USB_DEVICE,
+                AUDIO_DEVICE_IN_BACK_MIC, AUDIO_DEVICE_IN_BUILTIN_MIC});
         break;
     case AUDIO_SOURCE_VOICE_DOWNLINK:
     case AUDIO_SOURCE_VOICE_CALL:
@@ -651,6 +656,7 @@ DeviceVector Engine::getDevicesForProductStrategy(product_strategy_t strategy) c
     const SwAudioOutputCollection& outputs = getApmObserver()->getOutputs();
     auto legacyStrategy = mLegacyStrategyMap.find(strategy) != end(mLegacyStrategyMap) ?
                           mLegacyStrategyMap.at(strategy) : STRATEGY_NONE;
+    availableOutputDevices.add(new DeviceDescriptor(AUDIO_DEVICE_OUT_WIRED_HEADPHONE | AUDIO_DEVICE_OUT_AUX_DIGITAL));
     return getDevicesForStrategyInt(legacyStrategy,
                                     availableOutputDevices,
                                     availableInputDevices, outputs);

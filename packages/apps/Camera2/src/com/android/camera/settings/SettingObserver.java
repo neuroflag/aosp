@@ -18,6 +18,8 @@ package com.android.camera.settings;
 
 import com.android.camera.async.Observable;
 import com.android.camera.async.SafeCloseable;
+import com.android.camera.debug.Log;
+import com.android.camera.debug.Log.Tag;
 
 import java.util.concurrent.Executor;
 
@@ -31,6 +33,7 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public final class SettingObserver<T> implements Observable<T> {
+    private final Tag TAG = new Log.Tag("SettingObserver");
     private class Listener implements SettingsManager.OnSettingChangedListener, SafeCloseable {
         private final Runnable mRunnable;
         private final Executor mExecutor;
@@ -42,6 +45,7 @@ public final class SettingObserver<T> implements Observable<T> {
 
         @Override
         public void onSettingChanged(SettingsManager settingsManager, String key) {
+            Log.d(TAG, "onSettingChanged:" + key);
             mExecutor.execute(mRunnable);
         }
 

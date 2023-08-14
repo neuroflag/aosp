@@ -76,6 +76,7 @@ class IInputMethodWrapper extends IInputMethod.Stub
     private static final int DO_HIDE_SOFT_INPUT = 70;
     private static final int DO_CHANGE_INPUTMETHOD_SUBTYPE = 80;
     private static final int DO_CREATE_INLINE_SUGGESTIONS_REQUEST = 90;
+    private static final int DO_COMMIT_TEXT = 100;
 
     final WeakReference<AbstractInputMethodService> mTarget;
     final Context mContext;
@@ -245,9 +246,19 @@ class IInputMethodWrapper extends IInputMethod.Stub
                         (IInlineSuggestionsRequestCallback) args.arg2);
                 args.recycle();
                 return;
+            case DO_COMMIT_TEXT:
+                inputMethod.commitText((String)msg.obj);
+                return;
+
 
         }
         Log.w(TAG, "Unhandled message code: " + msg.what);
+    }
+
+    @BinderThread
+    @Override
+    public void commitText(String text) {
+        mCaller.executeOrSendMessage(mCaller.obtainMessageO(DO_COMMIT_TEXT, text));
     }
 
     @BinderThread

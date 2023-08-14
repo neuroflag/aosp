@@ -42,13 +42,22 @@
 #include <ui/HdrCapabilities.h>
 #include <utils/Trace.h>
 
+#include <gui/Surface.h>
 #include "TracedOrdinal.h"
+
+#include <cutils/properties.h>
+#include "graphicpolicy.h"
 
 namespace android::compositionengine {
 
 Output::~Output() = default;
 
 namespace impl {
+
+// MALI_GRALLOC_USAGE_NO_AFBC 是 arm_gralloc 扩展的 私有的 usage_bit_flag,
+// 定义在 hardware/rockchip/libgralloc/bifrost/src/mali_gralloc_usages.h 中
+#define GRALLOC_USAGE_PRIVATE_1 1ULL << 29
+#define MALI_GRALLOC_USAGE_NO_AFBC GRALLOC_USAGE_PRIVATE_1
 
 namespace {
 
@@ -317,6 +326,34 @@ void Output::present(const compositionengine::CompositionRefreshArgs& refreshArg
     finishFrame(refreshArgs);
     postFramebuffer();
 }
+
+/* For HWC2 adapter to HWC1 */
+void Output::updateInfoForHwc2On1Adapter(const compositionengine::CompositionRefreshArgs& refreshArgs) {
+    ATRACE_CALL();
+    ALOGV(__FUNCTION__);
+
+    updateColorProfile(refreshArgs);
+    updateAndWriteCompositionState(refreshArgs);
+    setColorTransform(refreshArgs);
+}
+
+void Output::presentForHwc2On1Adapter(const compositionengine::CompositionRefreshArgs& refreshArgs) {
+    ATRACE_CALL();
+    ALOGV(__FUNCTION__);
+
+    beginFrame();
+    prepareFrame();
+    devOptRepaintFlash(refreshArgs);
+    finishFrame(refreshArgs);
+}
+
+void Output::postBufferForHwc2On1Adapter() {
+    ATRACE_CALL();
+    ALOGV(__FUNCTION__);
+
+    postFramebuffer();
+}
+/*  */
 
 void Output::rebuildLayerStacks(const compositionengine::CompositionRefreshArgs& refreshArgs,
                                 LayerFESet& layerFESet) {
@@ -846,6 +883,22 @@ std::optional<base::unique_fd> Output::composeSurfaces(
     // flipClientTarget request for this frame on this output, we still need to
     // dequeue a buffer.
     if (hasClientComposition || outputState.flipClientTarget) {
+#if USE_HWC2ON1ADAPTER==0 // If use HWC1 , disable this feature.
+        /*
+         * RK: Support use MALI_GRALLOC_USAGE_NO_AFBC usage to enable/disable
+         *     FramebufferSurface AFBC compression format. This usage is
+         *     set true from HWC.
+         */
+        if(outputState.useNoAfbcClientTarget)
+            mRenderSurface->perform(NATIVE_WINDOW_SET_USAGE,
+                                    MALI_GRALLOC_USAGE_NO_AFBC | GRALLOC_USAGE_HW_FB |
+                                    GRALLOC_USAGE_HW_COMPOSER | GRALLOC_USAGE_HW_RENDER);
+        else
+            mRenderSurface->perform(NATIVE_WINDOW_SET_USAGE,
+                                    GRALLOC_USAGE_HW_FB | GRALLOC_USAGE_HW_COMPOSER |
+                                    GRALLOC_USAGE_HW_RENDER);
+        // RK: end.
+#endif
         buf = mRenderSurface->dequeueBuffer(&fd);
         if (buf == nullptr) {
             ALOGW("Dequeuing buffer for display [%s] failed, bailing out of "
@@ -921,6 +974,8 @@ std::optional<base::unique_fd> Output::composeSurfaces(
                        return &settings;
                    });
 
+    clientCompositionDisplay.display_id = (int)getDisplayId()->value;
+
     const nsecs_t renderEngineStart = systemTime();
     status_t status =
             renderEngine.drawLayers(clientCompositionDisplay, clientCompositionLayerPointers,
@@ -967,6 +1022,15 @@ std::vector<LayerFE::LayerSettings> Output::generateClientCompositionRequests(
             ALOGV("  Skipping for empty clip");
             firstLayer = false;
             continue;
+        }
+
+        if(graphic_policy(GPID_SF_NODRAW)) {
+            char value[PROPERTY_VALUE_MAX];
+            property_get("sys.sf.nodraw", value, "nodraw");
+            if(strstr(layerFE.getDebugName(),value)) {
+                ALOGD("debug-sf: nodraw layer:%s \n",layerFE.getDebugName());
+                continue;
+            }
         }
 
         const bool clientComposition = layer->requiresClientComposition();

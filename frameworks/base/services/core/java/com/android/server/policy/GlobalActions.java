@@ -21,6 +21,7 @@ import android.util.Slog;
 import com.android.server.LocalServices;
 import com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs;
 import com.android.server.policy.GlobalActionsProvider;
+import android.os.SystemProperties;
 
 class GlobalActions implements GlobalActionsProvider.GlobalActionsListener {
 
@@ -64,14 +65,18 @@ class GlobalActions implements GlobalActionsProvider.GlobalActionsListener {
         mKeyguardShowing = keyguardShowing;
         mDeviceProvisioned = deviceProvisioned;
         mShowing = true;
-        if (mGlobalActionsAvailable) {
-            mHandler.postDelayed(mShowTimeout, 5000);
-            mGlobalActionsProvider.showGlobalActions();
-        } else {
-            // SysUI isn't alive, show legacy menu.
-            ensureLegacyCreated();
-            mLegacyGlobalActions.showDialog(mKeyguardShowing, mDeviceProvisioned);
-        }
+        // if (mGlobalActionsAvailable && !"box".equals(SystemProperties.get("ro.target.product","unkonw"))) {
+        //     mHandler.postDelayed(mShowTimeout, 5000);
+        //     mGlobalActionsProvider.showGlobalActions();
+        // } else {
+        //     // SysUI isn't alive, show legacy menu.
+        //     ensureLegacyCreated();
+        //     mLegacyGlobalActions.showDialog(mKeyguardShowing, mDeviceProvisioned);
+        // }
+        // 
+        // SysUI isn't alive, show legacy menu.
+        ensureLegacyCreated();
+        mLegacyGlobalActions.showDialog(mKeyguardShowing, mDeviceProvisioned);
     }
 
     @Override

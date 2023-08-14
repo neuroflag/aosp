@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!--add for orientation-->
+    <string name="screen_orientation">Screen orientation</string>
+
+    <!-- firefly_modify_songjf, for show/hide statusbar  always-->
+    <string name="show_hide_statusbar_title">Always hide the status bar</string>
+
+    <!-- m.2 ssd -->
+    <string name="m2_ssd_title">M.2 SSD Type</string>
+    <string name="m2_ssd_dialog_title">M.2 SSD Switch(Take effect after restart)</string>
+    <string name="m2_ssd_sata">SATA</string>
+    <string name="m2_ssd_pcie">PCIe</string>
+</resources>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+  <!--add by songjf for orientation-->
+  <string-array name="set_screen_orientation_entries">
+    <item>自動</item> 
+    <item>橫屏</item>
+    <item>豎屏</item>
+    <item>反向橫屏</item>
+    <item>反向豎屏</item>
+  </string-array>
+</resources>

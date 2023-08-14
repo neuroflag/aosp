@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <fs_mgr.h>
 
 #include <android-base/chrono_utils.h>
 #include <android-base/file.h>
@@ -37,6 +38,7 @@
 
 #include "selabel.h"
 #include "util.h"
+#include "virtual_dev_initializer.h"
 
 using namespace std::chrono_literals;
 
@@ -81,7 +83,6 @@ static bool FindPciDevicePrefix(const std::string& path, std::string* result) {
     *result = path.substr(start, length);
     return true;
 }
-
 /* Given a path that may start with a virtual block device, populate
  * the supplied buffer with the virtual block device ID and return 0.
  * If it doesn't start with a virtual block device, or there is some
@@ -317,6 +318,7 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     std::string type;
     std::string partition;
     std::string uuid;
+    std::vector<std::string> links;
 
     if (FindPlatformDevice(uevent.path, &device)) {
         // Skip /devices/platform or /devices/ if present
@@ -340,17 +342,69 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
             symlinks.emplace_back("/dev/block/mapper/by-uuid/" + uuid);
         }
         return symlinks;
-    } else {
+    }else if(uevent.path.find(VirtualUeventPath) != std::string::npos) {
+        type = "virtual_block";
+        device = "mmcblkloop";
+    }else {
         return {};
     }
-
-    std::vector<std::string> links;
-
-    LOG(VERBOSE) << "found " << type << " device " << device;
+    
 
     auto link_path = "/dev/block/" + type + "/" + device;
-
     bool is_boot_device = boot_devices_.find(device) != boot_devices_.end();
+    std::string::size_type platform_block_path = uevent.path.find("devices/platform/");
+    std::string::size_type mmcblkloop_path = uevent.path.find(VirtualUeventPath);
+    if(platform_block_path == std::string::npos && mmcblkloop_path == std::string::npos){
+        //LOG(INFO) << "Do other block mount,such as dm-x device"
+    }else if(android::fs_mgr::GetBootTypeVirtualDisk()){
+        /* for firefly virtual disk boot */
+        std::string::size_type uevent_pos;
+        uevent_pos = uevent.path.find(VirtualUeventPath);
+        if(uevent_pos != std::string::npos)  {
+            is_boot_device=1;
+        }else{
+             is_boot_device=0;
+        } 
+    }else if(android::fs_mgr::GetBootTypeMultiDevice()){  
+        /* for firefly multidevices boot */
+        std::string boot_devices_storagenode = android::fs_mgr::GetBootDevicesNode();
+        std::string::size_type pcie_rk3568 = boot_devices_storagenode.find(PCIE_3568_NODE);
+        std::string::size_type pcie_rk3566 = boot_devices_storagenode.find(PCIE_3566_NODE);
+        std::string::size_type uevent_pos;
+        if(pcie_rk3568 != std::string::npos){
+            uevent_pos = uevent.path.find(REAL_PCIE_3568_PATH);
+            if(uevent_pos == std::string::npos){
+                is_boot_device=0;
+            }
+        }else if(pcie_rk3566 != std::string::npos){
+            uevent_pos = uevent.path.find(REAL_PCIE_3566_PATH);
+            if(uevent_pos == std::string::npos){
+                is_boot_device=0;
+            }
+        }else{
+            uevent_pos = uevent.path.find(boot_devices_storagenode);
+            if(uevent_pos == std::string::npos){
+                is_boot_device=0;
+            }
+        }
+    }else{
+        /* for firefly normal boot */
+        std::string android_boot_storagenode = android::fs_mgr::GetAndroidBootStoragemedia();
+        std::string::size_type android_boot_storagenode_emmc_pos = android_boot_storagenode.find("emmc");
+        std::string::size_type android_boot_storagenode_sd_pos = android_boot_storagenode.find("sd");
+        std::string::size_type uevent_pos;
+        if(android_boot_storagenode_emmc_pos != std::string::npos){
+            uevent_pos = uevent.path.find("fe310000");
+            if(uevent_pos == std::string::npos){
+                is_boot_device=0;
+            }
+        }else if(android_boot_storagenode_sd_pos != std::string::npos){
+            uevent_pos = uevent.path.find("fe2b0000");
+            if(uevent_pos == std::string::npos){
+                is_boot_device=0;
+            } 
+        }
+    }
     if (!uevent.partition_name.empty()) {
         std::string partition_name_sanitized(uevent.partition_name);
         SanitizePartitionName(&partition_name_sanitized);
@@ -366,7 +420,7 @@ std::vector<std::string> DeviceHandler::GetBlockDeviceSymlinks(const Uevent& uev
     } else if (is_boot_device) {
         // If we don't have a partition name but we are a partition on a boot device, create a
         // symlink of /dev/block/by-name/<device_name> for symmetry.
-        links.emplace_back("/dev/block/by-name/" + uevent.device_name);
+        links.emplace_back("/dev/block/by-name/" + uevent.device_name); 
     }
 
     auto last_slash = uevent.path.rfind('/');
@@ -458,7 +512,7 @@ void DeviceHandler::HandleAshmemUevent(const Uevent& uevent) {
     }
 }
 
-void DeviceHandler::HandleUevent(const Uevent& uevent) {
+void DeviceHandler::HandleUevent(const Uevent& uevent) {   
     if (uevent.action == "add" || uevent.action == "change" || uevent.action == "online") {
         FixupSysPermissions(uevent.path, uevent.subsystem);
     }
@@ -474,7 +528,7 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
         block = true;
         devpath = "/dev/block/" + Basename(uevent.path);
 
-        if (StartsWith(uevent.path, "/devices")) {
+        if (StartsWith(uevent.path, "/devices")) {          
             links = GetBlockDeviceSymlinks(uevent);
         }
     } else if (const auto subsystem =
@@ -492,6 +546,11 @@ void DeviceHandler::HandleUevent(const Uevent& uevent) {
             int device_id = uevent.minor % 128 + 1;
             devpath = StringPrintf("/dev/bus/usb/%03d/%03d", bus_id, device_id);
         }
+#if 1 //add by quectel for mknod /dev/cdc-wdm0
+        } else if (uevent.subsystem == "usbmisc" && !uevent.device_name.empty()) {
+            devpath = "/dev/" + uevent.device_name;
+#endif
+
     } else if (StartsWith(uevent.subsystem, "usb")) {
         // ignore other USB events
         return;

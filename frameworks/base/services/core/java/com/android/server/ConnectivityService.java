@@ -213,6 +213,7 @@ import com.android.server.connectivity.NetworkRanker;
 import com.android.server.connectivity.PermissionMonitor;
 import com.android.server.connectivity.ProxyTracker;
 import com.android.server.connectivity.Vpn;
+import com.android.server.connectivity.WifiSleepController;
 import com.android.server.net.BaseNetdEventCallback;
 import com.android.server.net.BaseNetworkObserver;
 import com.android.server.net.LockdownVpnTracker;
@@ -598,6 +599,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private final DnsManager mDnsManager;
     private final NetworkRanker mNetworkRanker;
+
+    private final WifiSleepController mWifiSleepController;
 
     private boolean mSystemReady;
     private Intent mInitialBroadcast;
@@ -1169,6 +1172,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         mDnsManager = new DnsManager(mContext, mDnsResolver, mSystemProperties);
         registerPrivateDnsSettingsCallbacks();
+
+	mWifiSleepController = new WifiSleepController(mContext);
     }
 
     private static NetworkCapabilities createDefaultNetworkCapabilitiesForUid(int uid) {
@@ -2276,9 +2281,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
             if (ConnectivityManager.CONNECTIVITY_ACTION.equals(intent.getAction())) {
                 final NetworkInfo ni = intent.getParcelableExtra(
                         ConnectivityManager.EXTRA_NETWORK_INFO);
-                final BroadcastOptions opts = BroadcastOptions.makeBasic();
-                opts.setMaxManifestReceiverApiLevel(Build.VERSION_CODES.M);
-                options = opts.toBundle();
+                // final BroadcastOptions opts = BroadcastOptions.makeBasic();
+                // opts.setMaxManifestReceiverApiLevel(Build.VERSION_CODES.M);
+                // options = opts.toBundle();
                 final IBatteryStats bs = mDeps.getBatteryStatsService();
                 try {
                     bs.noteConnectivityChanged(intent.getIntExtra(

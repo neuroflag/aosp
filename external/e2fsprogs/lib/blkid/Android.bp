@@ -35,6 +35,39 @@ cc_library {
             ],
             enabled: true
         },
+        android: {
+            srcs: [
+                "libiconv/libcharset/lib/localcharset.c",
+                "libiconv/lib/iconv.c",
+                "libiconv/lib/relocatable.c",
+            ],
+            cflags: [
+                "-include external/e2fsprogs/include/mingw/sys/sysmacros.h",
+                "-Wno-pointer-to-int-cast",
+                "-Wno-unused-variable",
+                "-DUSING_ICONV",
+                "-DHAVE_ERRNO_H",
+                "-DHAVE_LSEEK64",
+                "-DHAVE_LSEEK64_PROTOTYPE",
+                "-Wno-multichar",
+                "-Wno-unused-parameter",
+                "-Wno-sign-compare",
+                "-Wno-missing-field-initializers",
+                "-Wno-static-in-inline",
+                "-Wno-parentheses-equality",
+                "-DANDROID",
+                "-DLIBDIR=\"c\"",
+                "-DBUILDING_LIBICONV",
+                "-DIN_LIBRARY",
+            ],
+            local_include_dirs: [
+                "libiconv/include",
+                "libiconv/libcharset",
+                "libiconv/lib",
+                "libiconv/libcharset/include",
+                "libiconv/srclib",
+            ],
+        },
     },
 
     cflags: [
@@ -42,6 +75,10 @@ cc_library {
         "-Wno-error=pointer-sign",
         "-Wno-unused-parameter",
         "-fno-strict-aliasing",
+        "-Wno-unused-variable",
+        "-Wno-implicit-function-declaration",
+        "-Wno-sign-compare",
+        "-Wno-missing-field-initializers",
     ],
 
     header_libs: ["libext2-headers"],

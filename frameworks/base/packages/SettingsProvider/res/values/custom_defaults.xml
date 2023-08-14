@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--if true while show rotation in SystenUI and Settings-DisplaySettings -->
+    <bool name="def_enable_rotation_by_user">true</bool>
+
+    <!-- should show the hidebar button default -->
+    <bool name="def_hidebar_button_show">true</bool>
+    <!-- always hide statusbar -->
+    <bool name="def_always_hide_bar">false</bool>
+
+    <!--use windows ntp server for default-->
+    <string name="def_ntp_server" translatable="false">
+        time.windows.com
+    </string>
+
+    <!--com.sohu.inputmethod.sogouoem/.SogouIME:com.android.inputmethod.latin/.LatinIME -->
+    <string name="config_enabledInputMethods" translatable="false">com.android.inputmethod.latin/.LatinIME</string>
+
+    <string name="config_defaultdInputMethods" translatable="false">com.android.inputmethod.latin/.LatinIME</string>
+
+    <string name="def_shutdown_component_name" translatable="false"></string>
+</resources>

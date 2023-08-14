@@ -182,9 +182,12 @@ public class ResolutionUtil {
     private static List<Size> pickUpToThree(List<Size> sizes) {
         List<Size> result = new ArrayList<Size>();
         Size largest = sizes.get(0);
-        result.add(largest);
+        if (largest.width() != 1920 || largest.height() != 1088)
+            result.add(largest);
         Size lastSize = largest;
         for (Size size : sizes) {
+            if (size != null && size.width() == 1920 && size.height() == 1088)
+                continue;
             double targetArea = Math.pow(.5, result.size()) * area(largest);
             if (area(size) < targetArea) {
                 // This candidate is smaller than half the mega pixels of the

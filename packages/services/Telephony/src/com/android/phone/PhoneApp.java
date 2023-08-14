@@ -18,8 +18,11 @@ package com.android.phone;
 
 import android.app.Application;
 import android.os.UserHandle;
+import android.os.Looper;
+import android.util.Log;
 
 import com.android.services.telephony.TelecomAccountRegistry;
+import android.os.Handler;
 
 /**
  * Top-level Application class for the Phone app.
@@ -33,12 +36,23 @@ public class PhoneApp extends Application {
     @Override
     public void onCreate() {
         if (UserHandle.myUserId() == 0) {
-            // We are running as the primary user, so should bring up the
-            // global phone state.
-            mPhoneGlobals = new PhoneGlobals(this);
-            mPhoneGlobals.onCreate();
+            new Thread(new Runnable() {
 
-            TelecomAccountRegistry.getInstance(this).setupOnBoot();
+                @Override
+                public void run() {
+                    Looper.prepare(); 
+                    mPhoneGlobals = new PhoneGlobals(PhoneApp.this);
+                    mPhoneGlobals.onCreate();
+                    Looper.loop();
+                    Handler handler = new Handler(Looper.getMainLooper());
+                    handler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            TelecomAccountRegistry.getInstance(getApplicationContext()).setupOnBoot();
+                        }
+                    });                   
+                }
+            }).start();
         }
     }
 }

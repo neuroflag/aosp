@@ -70,6 +70,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifyTaskQueued");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionQueued(uri);
@@ -88,6 +89,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifyTaskDone");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionDone(uri);
@@ -108,6 +110,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifyTaskFailed");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionFailed(uri, failureMessageId, removeFromFilmstrip);
@@ -123,6 +126,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifyTaskCanceled");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionCanceled(uri);
@@ -142,6 +146,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifyTaskProgress");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionProgress(uri, progressPercent);
@@ -160,6 +165,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifyTaskProgressText");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionProgressText(uri, messageId);
@@ -178,6 +184,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifySessionUpdated");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionUpdated(uri);
@@ -201,6 +208,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifySessionCaptureIndicatorAvailable");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionCaptureIndicatorUpdate(indicator, rotationDegrees);
@@ -215,6 +223,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifySessionThumbnailAvailable");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionThumbnailUpdate(thumbnail);
@@ -230,6 +239,7 @@ public class CaptureSessionManagerImpl implements CaptureSessionManager {
             mMainHandler.execute(new Runnable() {
                 @Override
                 public void run() {
+                    Log.d(TAG,"notifySessionPictureDataAvailable");
                     synchronized (mTaskListeners) {
                         for (SessionListener listener : mTaskListeners) {
                             listener.onSessionPictureDataUpdate(pictureData, orientation);

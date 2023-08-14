@@ -120,6 +120,11 @@ public class AlarmManager {
     public static final int ELAPSED_REALTIME = 3;
 
     /**
+     * @hide
+     */
+    public static final int BOOT= 4;
+
+    /**
      * Broadcast Action: Sent after the value returned by
      * {@link #getNextAlarmClock()} has changed.
      *

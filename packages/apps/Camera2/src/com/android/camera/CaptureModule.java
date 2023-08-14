@@ -16,11 +16,17 @@
 
 package com.android.camera;
 
+import android.app.ActivityManager;
 import android.content.Context;
+import android.content.Intent;
+
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraAccessException;
 import android.location.Location;
 import android.media.MediaActionSound;
 import android.net.Uri;
@@ -90,6 +96,8 @@ import com.android.camera.util.Size;
 import com.android.camera2.R;
 import com.android.ex.camera2.portability.CameraAgent.CameraProxy;
 import com.google.common.logging.eventprotos;
+import android.hardware.Camera.CameraInfo;
+import android.provider.MediaStore;
 
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
@@ -122,7 +130,7 @@ public class CaptureModule extends CameraModule implements
     private static final int CAMERA_OPEN_CLOSE_TIMEOUT_MILLIS = 2500;
 
     /** System Properties switch to enable debugging focus UI. */
-    private static final boolean CAPTURE_DEBUG_UI = DebugPropertyHelper.showCaptureDebugUI();
+    private static final boolean CAPTURE_DEBUG_UI = true;//DebugPropertyHelper.showCaptureDebugUI();
 
     private final Object mDimensionLock = new Object();
 
@@ -157,6 +165,7 @@ public class CaptureModule extends CameraModule implements
     private boolean mHdrSceneEnabled = false;
     private boolean mHdrPlusEnabled = false;
     private final Object mSurfaceTextureLock = new Object();
+    private Surface mPreviewSurface;
     /**
      * Flag that is used when Fatal Error Handler is running and the app should
      * not continue execution
@@ -167,6 +176,8 @@ public class CaptureModule extends CameraModule implements
     private FocusController mFocusController;
     private OneCameraCharacteristics mCameraCharacteristics;
     final private PreviewTransformCalculator mPreviewTransformCalculator;
+    private CameraActivity mCameraActivity;
+    private CaptureSession mSession;
 
     /** The listener to listen events from the CaptureModuleUI. */
     private final CaptureModuleUI.CaptureModuleUIListener mUIListener =
@@ -217,6 +228,7 @@ public class CaptureModule extends CameraModule implements
             return new GestureDetector.SimpleOnGestureListener() {
                 @Override
                 public boolean onSingleTapUp(MotionEvent ev) {
+                    if (mPaused) return true;
                     Point tapPoint = new Point((int) ev.getX(), (int) ev.getY());
                     Log.v(TAG, "onSingleTapUpPreview location=" + tapPoint);
                     if (!mCameraCharacteristics.isAutoExposureSupported() &&
@@ -280,6 +292,7 @@ public class CaptureModule extends CameraModule implements
                     mMainThread.execute(new Runnable() {
                         @Override
                         public void run() {
+                            Log.d(TAG, "PictureSaverCallback");
                             mAppController.getServices().getRemoteShutterListener()
                                     .onPictureTaken(jpegImage);
                         }
@@ -311,7 +324,8 @@ public class CaptureModule extends CameraModule implements
     private final LocationManager mLocationManager;
     /** Plays sounds for countdown timer. */
     private SoundPlayer mSoundPlayer;
-    private final MediaActionSound mMediaActionSound;
+    private MediaActionSound mMediaActionSound;
+    private boolean mSoundPlayerLoaded = false;
 
     /** Whether the module is paused right now. */
     private boolean mPaused;
@@ -381,7 +395,7 @@ public class CaptureModule extends CameraModule implements
                        onReadyStateChanged(false);
                     }
                 });
-        mMediaActionSound = new MediaActionSound();
+        //mMediaActionSound = new MediaActionSound();
         guard.stop();
     }
 
@@ -399,6 +413,7 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void init(CameraActivity activity, boolean isSecureCamera, boolean isCaptureIntent) {
+        mCameraActivity = activity;
         Profile guard = mProfiler.create("CaptureModule.init").start();
         Log.d(TAG, "init UseAutotransformUiLayout = " + USE_AUTOTRANSFORM_UI_LAYOUT);
         HandlerThread thread = new HandlerThread("CaptureModule.mCameraHandler");
@@ -413,7 +428,7 @@ public class CaptureModule extends CameraModule implements
         }
         mDisplayRotation = CameraUtil.getDisplayRotation();
         mCameraFacing = getFacingFromCameraId(
-              mSettingsManager.getInteger(mAppController.getModuleScope(), Keys.KEY_CAMERA_ID));
+              mSettingsManager.getInteger(SettingsManager.SCOPE_GLOBAL, Keys.KEY_CAMERA_ID));
         mShowErrorAndFinish = !updateCameraCharacteristics();
         if (mShowErrorAndFinish) {
             return;
@@ -423,9 +438,15 @@ public class CaptureModule extends CameraModule implements
         synchronized (mSurfaceTextureLock) {
             mPreviewSurfaceTexture = mAppController.getCameraAppUI().getSurfaceTexture();
         }
-        mSoundPlayer = new SoundPlayer(mContext);
 
-        FocusSound focusSound = new FocusSound(mSoundPlayer, R.raw.material_camera_focus);
+        FocusSound focusSound = null;
+        if (!mSoundPlayerLoaded) {
+            mSoundPlayer = new SoundPlayer(mContext);
+            mMediaActionSound = new MediaActionSound();
+            focusSound = new FocusSound(mSoundPlayer, R.raw.material_camera_focus);
+            mMediaActionSound.load(MediaActionSound.SHUTTER_CLICK);
+            mSoundPlayerLoaded = true;
+        }
         mFocusController = new FocusController(mUI.getFocusRing(), focusSound, mMainThread);
 
         mHeadingSensor = new HeadingSensor(AndroidServices.instance().provideSensorManager());
@@ -438,12 +459,13 @@ public class CaptureModule extends CameraModule implements
             }
         });
 
-        mMediaActionSound.load(MediaActionSound.SHUTTER_CLICK);
+        //mMediaActionSound.load(MediaActionSound.SHUTTER_CLICK);
         guard.stop();
     }
 
     @Override
     public void onShutterButtonLongPressed() {
+        if (mPaused) return;
         try {
             OneCameraCharacteristics cameraCharacteristics;
             CameraId cameraId = mOneCameraManager.findFirstCameraFacing(mCameraFacing);
@@ -485,9 +507,10 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void onShutterButtonClick() {
-        if (mCamera == null) {
+        if (mCamera == null || mPaused) {
             return;
         }
+        Log.d(TAG, "onShutterButtonClick");
 
         int countDownDuration = mSettingsManager
                 .getInteger(SettingsManager.SCOPE_GLOBAL, Keys.KEY_COUNTDOWN_DURATION);
@@ -533,18 +556,18 @@ public class CaptureModule extends CameraModule implements
             return;
         }
 
-        CaptureSession session = createAndStartCaptureSession();
+        mSession = createAndStartCaptureSession();
         int orientation = mAppController.getOrientationManager().getDeviceOrientation()
                 .getDegrees();
 
         // TODO: This should really not use getExternalCacheDir and instead use
         // the SessionStorage API. Need to sync with gcam if that's OK.
         PhotoCaptureParameters params = new PhotoCaptureParameters(
-                session.getTitle(), orientation, session.getLocation(),
+                mSession.getTitle(), orientation, mSession.getLocation(),
                 mContext.getExternalCacheDir(), this, mPictureSaverCallback,
                 mHeadingSensor.getCurrentHeading(), mZoomValue, 0);
-        decorateSessionAtCaptureTime(session);
-        mCamera.takePicture(params, session);
+        decorateSessionAtCaptureTime(mSession);
+        mCamera.takePicture(params, mSession);
     }
 
     /**
@@ -613,12 +636,17 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void onQuickExpose() {
+        if (mPaused || mCamera == null) return;
+        Log.d(TAG, "onQuickExpose===");
         mMainThread.execute(new Runnable() {
             @Override
             public void run() {
+                if (mPaused || mCamera == null) return;
                 // Starts the short version of the capture animation UI.
                 mAppController.startFlashAnimation(true);
-                mMediaActionSound.play(MediaActionSound.SHUTTER_CLICK);
+                if (mSettingsManager.getBoolean(SettingsManager.SCOPE_GLOBAL,
+                        Keys.KEY_CAMERA_SOUND))
+                    mMediaActionSound.play(MediaActionSound.SHUTTER_CLICK);
             }
         });
     }
@@ -673,6 +701,18 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void resume() {
+        Log.d(TAG, "resume");
+        Intent intent = mCameraActivity.getIntent();
+        String action = intent.getAction();
+        if (MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA.equals(action)
+                || MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE.equals(action)) {
+            if (intent.getBooleanExtra("android.intent.extra.USE_FRONT_CAMERA", false) ||
+                    intent.getBooleanExtra("com.google.assistant.extra.USE_FRONT_CAMERA", false))
+                mCameraFacing = Facing.FRONT;
+            //Sovle the problem that the CameraFacing is Back by double clicking the power key.
+            /*else
+                mCameraFacing = Facing.BACK;*/
+        }
         if (mShowErrorAndFinish) {
             return;
         }
@@ -713,6 +753,17 @@ public class CaptureModule extends CameraModule implements
             guard.mark("initSurfaceTextureConsumer");
         }
 
+        if (!mSoundPlayerLoaded) {
+            mSoundPlayer = new SoundPlayer(mContext);
+            mMediaActionSound = new MediaActionSound();
+            mMediaActionSound.load(MediaActionSound.SHUTTER_CLICK);
+            if (mFocusController != null) {
+                mFocusController = null;
+                FocusSound focusSound = new FocusSound(mSoundPlayer, R.raw.material_camera_focus);
+                mFocusController = new FocusController(mUI.getFocusRing(), focusSound, mMainThread);
+            }
+            mSoundPlayerLoaded = true;
+        }
         mSoundPlayer.loadSound(R.raw.timer_final_second);
         mSoundPlayer.loadSound(R.raw.timer_increment);
 
@@ -723,6 +774,7 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void pause() {
+        Log.d(TAG, "pause");
         if (mShowErrorAndFinish) {
             return;
         }
@@ -736,14 +788,30 @@ public class CaptureModule extends CameraModule implements
         mBurstController.release();
         closeCamera();
         resetTextureBufferSize();
-        mSoundPlayer.unloadSound(R.raw.timer_final_second);
-        mSoundPlayer.unloadSound(R.raw.timer_increment);
+        if (mSoundPlayerLoaded) {
+            mSoundPlayer.unloadSound(R.raw.timer_final_second);
+            mSoundPlayer.unloadSound(R.raw.timer_increment);
+            mSoundPlayer.unloadSound(R.raw.material_camera_focus);
+            mMediaActionSound.release();
+            mSoundPlayer.release();
+            mSoundPlayerLoaded = false;
+        }
     }
 
     @Override
     public void destroy() {
-        mSoundPlayer.release();
-        mMediaActionSound.release();
+        Log.d(TAG, "destroy");
+        if (mSoundPlayerLoaded) {
+            mSoundPlayer.release();
+            mMediaActionSound.release();
+            mSoundPlayerLoaded = false;
+        }
+        if (mSession != null) {
+            mSession.cancel();
+            mSession = null;
+        }
+            
+        mCameraHandler.removeCallbacksAndMessages(null);
         mCameraHandler.getLooper().quitSafely();
     }
 
@@ -763,7 +831,7 @@ public class CaptureModule extends CameraModule implements
             // Sticky HDR+ mode should hard reset HDR+ to on, and camera back
             // facing.
             settingsManager.set(SettingsManager.SCOPE_GLOBAL, Keys.KEY_CAMERA_HDR_PLUS, true);
-            settingsManager.set(mAppController.getModuleScope(), Keys.KEY_CAMERA_ID,
+            settingsManager.set(SettingsManager.SCOPE_GLOBAL, Keys.KEY_CAMERA_ID,
                   mOneCameraManager.findFirstCameraFacing(Facing.BACK).getValue());
         }
     }
@@ -850,6 +918,21 @@ public class CaptureModule extends CameraModule implements
                                 mAppController.getCameraScope(), Keys.KEY_EXPOSURE, value);
                     }
                 };
+        
+        bottomBarSpec.enableWhiteBalance = mCameraCharacteristics.isWhiteBalanceSupported();
+        bottomBarSpec.supportedWhiteBalances = mCameraCharacteristics.getSupportedWhiteBalances();
+        bottomBarSpec.whiteBalanceSetCallback = 
+            new CameraAppUI.BottomBarUISpec.WhiteBalanceSetCallback() {
+            
+            @Override
+            public void setWhiteBalance(String value) {
+                // TODO Auto-generated method stub
+                if (mPaused || mCamera == null) return;
+                if (DEBUG) Log.i(TAG, "WhiteBalanceSetCallback");
+                mSettingsManager.set(
+                        mAppController.getCameraScope(), Keys.KEY_WHITEBALANCE, value);
+            }
+        };
 
         return bottomBarSpec;
     }
@@ -883,7 +966,7 @@ public class CaptureModule extends CameraModule implements
         switch (keyCode) {
             case KeyEvent.KEYCODE_VOLUME_UP:
             case KeyEvent.KEYCODE_VOLUME_DOWN:
-                onShutterButtonClick();
+                //onShutterButtonClick();
                 return true;
         }
         return false;
@@ -1024,26 +1107,31 @@ public class CaptureModule extends CameraModule implements
 
     @Override
     public void onThumbnailResult(byte[] jpegData) {
+        Log.d(TAG, "onThumbnailResult");
         getServices().getRemoteShutterListener().onPictureTaken(jpegData);
     }
 
     @Override
     public void onPictureTaken(CaptureSession session) {
+        Log.d(TAG, "onPictureTaken");
         mAppController.getCameraAppUI().enableModeOptions();
     }
 
     @Override
     public void onPictureSaved(Uri uri) {
+        Log.d(TAG, "onPictureSaved");
         mAppController.notifyNewMedia(uri);
     }
 
     @Override
     public void onTakePictureProgress(float progress) {
+        Log.d(TAG, "onTakePictureProgress");
         mUI.setPictureTakingProgress((int) (progress * 100));
     }
 
     @Override
     public void onPictureTakingFailed() {
+        Log.d(TAG, "onPictureTakingFailed");
         mAppController.getFatalErrorHandler().onMediaStorageFailure();
     }
 
@@ -1122,7 +1210,7 @@ public class CaptureModule extends CameraModule implements
                     // has changed to the desired camera.
                     SettingsManager settingsManager = mAppController.getSettingsManager();
                     if (Keys.isCameraBackFacing(settingsManager,
-                            mAppController.getModuleScope())) {
+                            SettingsManager.SCOPE_GLOBAL)) {
                         throw new IllegalStateException(
                                 "Hdr plus should never be switching from front facing camera.");
                     }
@@ -1147,7 +1235,7 @@ public class CaptureModule extends CameraModule implements
 
                     // At the time this callback is fired, the camera id
                     // has be set to the desired camera.
-                    mSettingsManager.set(mAppController.getModuleScope(), Keys.KEY_CAMERA_ID,
+                    mSettingsManager.set(SettingsManager.SCOPE_GLOBAL, Keys.KEY_CAMERA_ID,
                             cameraId);
 
                     Log.d(TAG, "Start to switch camera. cameraId=" + cameraId);
@@ -1296,6 +1384,7 @@ public class CaptureModule extends CameraModule implements
         Size previewBufferSize = mCamera.pickPreviewSize(mPictureSize, mContext);
         mPreviewBufferWidth = previewBufferSize.getWidth();
         mPreviewBufferHeight = previewBufferSize.getHeight();
+        Log.d(TAG,"picturesize:" + mPictureSize + ",previewBuffer:" + mPreviewBufferWidth + "x" + mPreviewBufferHeight);
 
         // Workaround for N4 TextureView/HAL issues b/19271661 for 16:9 preview
         // streams.
@@ -1307,6 +1396,39 @@ public class CaptureModule extends CameraModule implements
             mPreviewBufferHeight = 960;
         }
         updatePreviewBufferSize();
+    }
+
+    /**
+     * A.Basic Actions "Take a photo/selfie" can open correct camera.
+     * B.Basic Actions "Take a picture in 3 seconds.", "Take a selfie in 3 seconds.", camera can take photo automatically.
+     * */
+    private void doVoiceAction() {
+        // Called by assistant.
+        Intent intent = mCameraActivity.getIntent();
+        String action = intent.getAction();
+        if (MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA.equals(action)) {
+            boolean shouldeTakePic = mCameraActivity.isVoiceInteractionRoot() &&
+                !intent.getBooleanExtra("com.google.assistant.extra.CAMERA_OPEN_ONLY", false);
+            if (shouldeTakePic) {
+                int timerDuration = intent.getIntExtra("com.google.assistant.extra.TIMER_DURATION_SECONDS", 0);
+                if (timerDuration > 0) {
+                    new Thread() {
+                        @Override
+                        public void run() {
+                            super.run();
+                            try {
+                                Thread.sleep(timerDuration * 1000);
+                                onShutterButtonClick();
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error in SHUTTER_CLICK!" + e.toString());
+                            }
+                        }
+                    }.start();
+                } else {
+                    onShutterButtonClick();
+                }
+            }
+        }
     }
 
     /**
@@ -1355,6 +1477,7 @@ public class CaptureModule extends CameraModule implements
         boolean useHdr = mHdrPlusEnabled && mCameraFacing == Facing.BACK;
 
         CameraId cameraId = mOneCameraManager.findFirstCameraFacing(mCameraFacing);
+        Log.d(TAG,"cameraId="+cameraId);
         final String settingScope = SettingsManager.getCameraSettingScope(cameraId.getValue());
 
         OneCameraCaptureSetting captureSetting;
@@ -1394,6 +1517,7 @@ public class CaptureModule extends CameraModule implements
 
                   @Override
                   public void onCameraClosed() {
+                      Log.d(TAG, "onCameraClosed");
                       mCamera = null;
                       mCameraOpenCloseLock.release();
                   }
@@ -1439,7 +1563,8 @@ public class CaptureModule extends CameraModule implements
                       });
 
                       // TODO: Consider rolling these two calls into one.
-                      camera.startPreview(new Surface(getPreviewSurfaceTexture()),
+                      mPreviewSurface = new Surface(getPreviewSurfaceTexture());
+                      camera.startPreview(mPreviewSurface,
                             new CaptureReadyCallback() {
                                 @Override
                                 public void onSetupFailed() {
@@ -1490,6 +1615,8 @@ public class CaptureModule extends CameraModule implements
                                             // has started.
                                             mUI.initializeZoom(mCamera.getMaxZoom());
                                             mCamera.setFocusStateListener(CaptureModule.this);
+                                            // Add action for voice.
+                                            doVoiceAction();
                                         }
                                     });
                                 }
@@ -1500,6 +1627,7 @@ public class CaptureModule extends CameraModule implements
     }
 
     private void closeCamera() {
+        Log.d(TAG, "closeCamera");
         Profile profile = mProfiler.create("CaptureModule.closeCamera()").start();
         try {
             mCameraOpenCloseLock.acquire();
@@ -1512,10 +1640,15 @@ public class CaptureModule extends CameraModule implements
                 mCamera.close();
                 profile.mark("mCamera.close()");
                 mCamera.setFocusStateListener(null);
+                mCamera.setReadyStateChangedListener(null);
+                mCamera.setFocusStateListener(null);
                 mCamera = null;
             }
+            if (mPreviewSurface != null)
+                mPreviewSurface.release();
         } finally {
             mCameraOpenCloseLock.release();
+            Log.d(TAG, "closeCamera end");
         }
         profile.stop();
     }
@@ -1530,6 +1663,7 @@ public class CaptureModule extends CameraModule implements
         if (mPaused) {
             return;
         }
+        Log.d(TAG, "switchCamera");
         cancelCountDown();
         mAppController.freezeScreenUntilPreviewReady();
         initSurfaceTextureConsumer();
@@ -1539,8 +1673,23 @@ public class CaptureModule extends CameraModule implements
      * Returns which way around the camera is facing, based on it's ID.
      */
     private Facing getFacingFromCameraId(int cameraId) {
+        try {
+            CameraManager manager = (CameraManager) mCameraActivity.getSystemService(Context.CAMERA_SERVICE);
+            String cameraIds = manager.getCameraIdList()[cameraId];
+            Log.d(TAG,"cameraIds="+cameraIds);
+            CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraIds);
+            int mLensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
+            // cameraservice map external to front for legacy API
+            return (mLensFacing == CameraCharacteristics.LENS_FACING_BACK) ? Facing.BACK : Facing.FRONT;
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+            Log.e(TAG,"find camera facing failed !!!");
+            return Facing.BACK;
+        }
+        /*
         return mAppController.getCameraProvider().getCharacteristics(cameraId)
                 .isFacingFront() ? Facing.FRONT : Facing.BACK;
+        */
     }
 
     private void resetTextureBufferSize() {
@@ -1552,5 +1701,23 @@ public class CaptureModule extends CameraModule implements
         // the SurfaceTexture cannot be transformed by matrix set on the
         // TextureView.
         updatePreviewBufferSize();
+    }
+
+    @Override
+    public void onShutterButtonLongClickRelease() {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void onNonDecorWindowSizeChanged() {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void onOrientationChanged(int orientation) {
+        // TODO Auto-generated method stub
+        
     }
 }

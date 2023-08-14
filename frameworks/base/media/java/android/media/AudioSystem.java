@@ -212,6 +212,9 @@ public class AudioSystem
     @Retention(RetentionPolicy.SOURCE)
     public @interface AudioFormatNativeEnumForBtCodec {}
 
+    // add AUDIO_FORMAT_IEC61937 define
+    /** @hide */
+    public static final int AUDIO_FORMAT_IEC61937       = 0x0D000000;
     /**
      * @hide
      * Convert audio format enum values to Bluetooth codec values
@@ -1754,10 +1757,10 @@ public class AudioSystem
     public static int[] DEFAULT_STREAM_VOLUME = new int[] {
         4,  // STREAM_VOICE_CALL
         7,  // STREAM_SYSTEM
-        5,  // STREAM_RING
+        0,  // STREAM_RING
         5, // STREAM_MUSIC
         6,  // STREAM_ALARM
-        5,  // STREAM_NOTIFICATION
+        0,  // STREAM_NOTIFICATION
         7,  // STREAM_BLUETOOTH_SCO
         7,  // STREAM_SYSTEM_ENFORCED
         5, // STREAM_DTMF
@@ -1793,7 +1796,8 @@ public class AudioSystem
         if (((TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE))
                 .isVoiceCapable()) {
             return PLATFORM_VOICE;
-        } else if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+        } else if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+            || context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION)) {
             return PLATFORM_TELEVISION;
         } else {
             return PLATFORM_DEFAULT;

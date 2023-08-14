@@ -75,7 +75,27 @@ bool fs_mgr_get_boot_config_from_kernel(const std::string& cmdline, const std::s
     *out_val = "";
     return false;
 }
+bool fs_mgr_get_boot_config_from_kernel_cmdline_without_andoridbootstring(const std::string& in_key, std::string* out_val) {
+    std::string cmdline;
+    if (!android::base::ReadFileToString("/proc/cmdline", &cmdline)) return false;
+    if (!cmdline.empty() && cmdline.back() == '\n') {
+        cmdline.pop_back();
+    }
 
+    FS_MGR_CHECK(out_val != nullptr);
+
+    const std::string cmdline_key(in_key);
+    for (const auto& [key, value] : fs_mgr_parse_boot_config(cmdline)) {
+        if (key == cmdline_key) {
+            *out_val = value;
+            return true;
+        }
+    }
+
+    *out_val = "";
+    return false;
+
+}
 // Tries to get the given boot config value from kernel cmdline.
 // Returns true if successfully found, false otherwise.
 bool fs_mgr_get_boot_config_from_kernel_cmdline(const std::string& key, std::string* out_val) {

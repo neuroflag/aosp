@@ -47,6 +47,8 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
 
     private FilmstripItemList mFilmstripItems;
 
+    private boolean mLoadingAll = false;
+    private boolean mLoadingNewPhoto = false;
 
     private Listener mListener;
     private FilmstripItemListener mFilmstripItemListener;
@@ -72,12 +74,14 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
 
     @Override
     public void requestLoadNewPhotos() {
+        if (mLoadingNewPhoto) Log.w(TAG, "LoadNewPhotosTask is loading");
         LoadNewPhotosTask ltask = new LoadNewPhotosTask(mContext, mLastPhotoId);
         ltask.execute(mContext.getContentResolver());
     }
 
     @Override
     public void requestLoad(Callback<Void> onDone) {
+        if (mLoadingAll) Log.w(TAG, "requestLoad is loading");
         QueryTask qtask = new QueryTask(onDone);
         qtask.execute(mContext);
     }
@@ -151,7 +155,7 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
     @Override
     public void setListener(Listener listener) {
         mListener = listener;
-        if (mFilmstripItems.size() != 0) {
+        if (mFilmstripItems.size() != 0 && mListener != null) {
             mListener.onFilmstripItemLoaded();
         }
     }
@@ -166,7 +170,8 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
         // Delete previously removed data first.
         executeDeletion();
         mFilmstripItemToDelete = d;
-        mListener.onFilmstripItemRemoved(index, d);
+        if (mListener != null)
+            mListener.onFilmstripItemRemoved(index, d);
     }
 
     @Override
@@ -323,6 +328,7 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
          */
         @Override
         protected List<PhotoItem> doInBackground(ContentResolver... contentResolvers) {
+            mLoadingNewPhoto = true;
             if (mMinPhotoId != FilmstripItemBase.QUERY_ALL_MEDIA_ID) {
                 Log.v(TAG, "updating media metadata with photos newer than id: " + mMinPhotoId);
                 final ContentResolver cr = contentResolvers[0];
@@ -356,6 +362,7 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
                     addOrUpdate(filmstripItem);
                 }
             }
+            mLoadingNewPhoto = false;
         }
     }
 
@@ -389,6 +396,7 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
          */
         @Override
         protected QueryTaskResult doInBackground(Context... contexts) {
+            mLoadingAll = true;
             final Context context = contexts[0];
             FilmstripItemList l = new FilmstripItemList();
             // Photos and videos
@@ -443,6 +451,7 @@ public class CameraFilmstripDataAdapter implements LocalFilmstripDataAdapter {
             // Now check for any photos added since this task was kicked off
             LoadNewPhotosTask ltask = new LoadNewPhotosTask(mContext, mLastPhotoId);
             ltask.execute(mContext.getContentResolver());
+            mLoadingAll = false;
         }
     }
 

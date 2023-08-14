@@ -31,6 +31,7 @@ import com.android.camera.async.Observable;
 import com.android.camera.async.Observables;
 import com.android.camera.async.Updatable;
 import com.android.camera.burst.BurstFacade;
+import com.android.camera.debug.Log;
 import com.android.camera.debug.Loggers;
 import com.android.camera.one.OneCamera;
 import com.android.camera.one.OneCameraCharacteristics;
@@ -82,6 +83,8 @@ public class SimpleOneCameraFactory implements OneCameraFactory {
     private final int mImageFormat;
     private final int mMaxImageCount;
     private final ImageRotationCalculator mImageRotationCalculator;
+    
+    private final Log.Tag TAG = new Log.Tag("SimpleOneCameraFactory");
 
     /**
      * @param imageFormat The {@link ImageFormat} to use for full-size images to
@@ -104,6 +107,7 @@ public class SimpleOneCameraFactory implements OneCameraFactory {
             final Size pictureSize,
             final ImageSaver.Builder imageSaverBuilder,
             final Observable<OneCamera.PhotoCaptureParameters.Flash> flashSetting,
+            final Observable<OneCamera.PhotoCaptureParameters.WhiteBalance> wbSetting,
             final Observable<Integer> exposureSetting,
             final Observable<Boolean> hdrSceneSetting,
             final BurstFacade burstFacade,
@@ -134,6 +138,7 @@ public class SimpleOneCameraFactory implements OneCameraFactory {
                     Observable<Float> zoomState,
                     Updatable<TotalCaptureResultProxy> metadataCallback,
                     Updatable<Boolean> readyState) {
+                Log.d(TAG, "CameraStarter.CameraControls startCamera");
                 // Create the FrameServer from the CaptureSession.
                 FrameServerFactory frameServerComponent = new FrameServerFactory(
                         new Lifetime(cameraLifetime), cameraCaptureSession, new HandlerFactory());
@@ -184,6 +189,7 @@ public class SimpleOneCameraFactory implements OneCameraFactory {
                         cameraCommandExecutor,
                         new BasicPreviewCommandFactory(ephemeralFrameServer),
                         flashSetting,
+                        wbSetting,
                         exposureSetting,
                         zoomState,
                         hdrSceneSetting,

@@ -54,7 +54,7 @@ public class ImageProcessorProxyListener implements ImageProcessorListener {
      */
     protected void logWrapper(String message) {
         // Uncomment for more verbose messaging.
-        // Log.v(TAG, message);
+        Log.d(TAG, message);
     }
 
     ImageProcessorProxyListener() {

@@ -38,6 +38,13 @@ void restart_root_service(unique_fd fd) {
         return;
     }
 
+    const std::string value = android::base::GetProperty("persist.sys.root_access", "0");
+
+    if (!value.empty() && (atoi(value.c_str()) & 2) != 2) {
+        WriteFdExactly(fd, "root access is disabled by system setting - enable in settings -> development options\n");
+        return;
+    }
+
     LOG(INFO) << "adbd restarting as root";
     android::base::SetProperty("service.adb.root", "1");
     WriteFdExactly(fd.get(), "restarting adbd as root\n");

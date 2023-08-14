@@ -40,6 +40,7 @@ cc_library_shared {
     ],
     export_include_dirs: ["."],
     cflags: [
+	"-D_FILE_OFFSET_BITS=64",
         "-DMTP_DEVICE",
         "-DMTP_HOST",
         "-Wall",

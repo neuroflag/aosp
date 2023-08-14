@@ -1573,7 +1573,17 @@ public final class DisplayManagerService extends SystemService {
                     + device.getDisplayDeviceInfoLocked());
             return;
         }
-        display.configureDisplayLocked(t, device, info.state == Display.STATE_OFF);
+        if(SystemProperties.getBoolean("vendor.hwc.enable_display_configs", false)){
+          if(device.getDisplayDeviceInfoLocked().type==Display.TYPE_EXTERNAL){
+             LogicalDisplay externalDisplay = findLogicalDisplayForDeviceLocked(device);
+             device.setDesiredDisplayModeSpecsLocked(externalDisplay.getDesiredDisplayModeSpecsLocked());
+             display.configureDisplayLocked(t, device, info.state == Display.STATE_OFF/*,externalDisplay.getDesiredDisplayModeSpecsLocked()*/);
+          }else {
+             display.configureDisplayLocked(t, device, info.state == Display.STATE_OFF/*,null*/);
+          }
+        }else{
+          display.configureDisplayLocked(t, device, info.state == Display.STATE_OFF);
+        }
         final Optional<Integer> viewportType = getViewportType(info);
         if (viewportType.isPresent()) {
             populateViewportLocked(viewportType.get(), display.getDisplayIdLocked(), device, info);
@@ -1719,6 +1729,7 @@ public final class DisplayManagerService extends SystemService {
             pw.println();
             pw.println("Display Devices: size=" + mDisplayDevices.size());
             for (DisplayDevice device : mDisplayDevices) {
+                pw.println();
                 pw.println("  " + device.getDisplayDeviceInfoLocked());
                 device.dumpLocked(ipw);
             }

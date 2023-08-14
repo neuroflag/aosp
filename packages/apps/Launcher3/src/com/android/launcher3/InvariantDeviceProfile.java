@@ -19,6 +19,7 @@ package com.android.launcher3;
 import static com.android.launcher3.Utilities.getDevicePrefs;
 import static com.android.launcher3.Utilities.getPointString;
 import static com.android.launcher3.config.FeatureFlags.APPLY_CONFIG_AT_RUNTIME;
+import com.android.launcher3.config.FeatureFlags;
 import static com.android.launcher3.util.Executors.MAIN_EXECUTOR;
 import static com.android.launcher3.util.PackageManagerHelper.getPackageFilter;
 
@@ -517,6 +518,17 @@ public class InvariantDeviceProfile {
             out.add(new DisplayOption().add(p).multiply(w));
         }
         return out.multiply(1.0f / weights);
+    }
+
+    public int getAllAppsButtonRank() {
+        if (FeatureFlags.NO_ALL_APPS_ICON) {
+            throw new IllegalAccessError("Accessing all apps rank when all-apps is disabled");
+        }
+        return numHotseatIcons / 2;
+    }
+
+    public boolean isAllAppsButtonRank(int rank) {
+        return rank == getAllAppsButtonRank();
     }
 
     public DeviceProfile getDeviceProfile(Context context) {

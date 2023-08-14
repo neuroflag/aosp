@@ -211,7 +211,7 @@ public class AllAppsTransitionController implements StateHandler<LauncherState>,
             setter.setViewAlpha(mAppsView.getContentView(), 0, allAppsFade);
             setter.setViewAlpha(mAppsView.getScrollBar(), 0, allAppsFade);
         }
-        mAppsView.getSearchUiManager().setContentVisibility(visibleElements, setter, allAppsFade);
+        // mAppsView.getSearchUiManager().setContentVisibility(visibleElements, setter, allAppsFade);
 
         setter.setInt(mScrimView, ScrimView.DRAG_HANDLE_ALPHA,
                 (visibleElements & VERTICAL_SWIPE_INDICATOR) != 0 ? 255 : 0, allAppsFade);

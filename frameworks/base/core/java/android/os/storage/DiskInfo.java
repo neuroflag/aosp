@@ -50,6 +50,11 @@ public class DiskInfo implements Parcelable {
     public static final int FLAG_DEFAULT_PRIMARY = 1 << 1;
     public static final int FLAG_SD = 1 << 2;
     public static final int FLAG_USB = 1 << 3;
+    public static final int FLAG_PCIE = 1 << 6;
+    public static final int FLAG_HARDDISK = 1 << 7;
+
+    // For Firefly Virtual Disks(Share Block)
+    public static final int FLAG_SHAREBLOCK = 1 << 8;
 
     public final String id;
     @UnsupportedAppUsage
@@ -116,6 +121,12 @@ public class DiskInfo implements Parcelable {
             } else {
                 return res.getString(com.android.internal.R.string.storage_usb_drive);
             }
+        }else if ((flags & FLAG_PCIE) != 0) {
+            return res.getString(com.android.internal.R.string.storage_pcie_drive);
+        } else if ((flags & FLAG_HARDDISK) != 0) {
+            return res.getString(com.android.internal.R.string.storage_harddisk_drive);
+        } else if ((flags & FLAG_SHAREBLOCK) != 0) {
+            return res.getString(com.android.internal.R.string.storage_shareblock_drive);
         } else {
             return null;
         }
@@ -127,7 +138,13 @@ public class DiskInfo implements Parcelable {
             return res.getString(com.android.internal.R.string.storage_sd_card);
         } else if (isUsb()) {
             return res.getString(com.android.internal.R.string.storage_usb_drive);
-        } else {
+        } else if (isPcie()) {
+            return res.getString(com.android.internal.R.string.storage_pcie_drive);
+        } else if (isHardDisk()) {
+            return res.getString(com.android.internal.R.string.storage_harddisk_drive);
+        } else if (isShareBlock()) {
+            return res.getString(com.android.internal.R.string.storage_shareblock_drive);
+        }else {
             return null;
         }
     }
@@ -150,6 +167,21 @@ public class DiskInfo implements Parcelable {
     @UnsupportedAppUsage
     public boolean isUsb() {
         return (flags & FLAG_USB) != 0;
+    }
+
+    @UnsupportedAppUsage
+    public boolean isPcie() {
+        return (flags & FLAG_PCIE) != 0;
+    }
+
+    @UnsupportedAppUsage
+    public boolean isHardDisk() {
+        return (flags & FLAG_HARDDISK) != 0;
+    }
+    
+    @UnsupportedAppUsage
+    public boolean isShareBlock() {
+        return (flags & FLAG_SHAREBLOCK) != 0;
     }
 
     @Override

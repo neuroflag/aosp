@@ -45,6 +45,7 @@ import static android.content.pm.PackageManager.FEATURE_ACTIVITIES_ON_SECONDARY_
 import static android.content.pm.PackageManager.FEATURE_CANT_SAVE_STATE;
 import static android.content.pm.PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT;
 import static android.content.pm.PackageManager.FEATURE_LEANBACK;
+import static android.content.pm.PackageManager.FEATURE_TELEVISION;
 import static android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.FactoryTest.FACTORY_TEST_HIGH_LEVEL;
@@ -736,7 +737,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         synchronized (mGlobalLock) {
             final PackageManager pm = mContext.getPackageManager();
             mHasHeavyWeightFeature = pm.hasSystemFeature(FEATURE_CANT_SAVE_STATE);
-            mHasLeanbackFeature = pm.hasSystemFeature(FEATURE_LEANBACK);
+            mHasLeanbackFeature = pm.hasSystemFeature(FEATURE_LEANBACK) || pm.hasSystemFeature(FEATURE_TELEVISION);
             mAssistUtils = new AssistUtils(mContext);
             mVrController.onSystemReady();
             mRecentTasks.onSystemReadyLocked();

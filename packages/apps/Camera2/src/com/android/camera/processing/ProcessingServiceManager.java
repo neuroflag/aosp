@@ -77,7 +77,8 @@ public class ProcessingServiceManager implements ProcessingTaskConsumer {
     @Override
     public synchronized void enqueueTask(ProcessingTask task) {
         mQueue.add(task);
-        Log.d(TAG, "Task added. Queue size now: " + mQueue.size());
+        Log.d(TAG, "Task added. Queue size now: " + mQueue.size()
+                + ", ServiceRunning:" + mServiceRunning + ",HoldProcessing:" + mHoldProcessing);
 
         if (!mServiceRunning && !mHoldProcessing) {
             startService();
@@ -156,6 +157,7 @@ public class ProcessingServiceManager implements ProcessingTaskConsumer {
      * itself automatically and call #stitchingFinished().
      */
     private void startService() {
+        Log.d(TAG, "startService ProcessingService");
         mAppContext.startService(new Intent(mAppContext, ProcessingService.class));
         mServiceRunning = true;
     }

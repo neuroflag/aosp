@@ -22,6 +22,7 @@
 #include <media/AudioParameter.h>
 #include <mediautils/SchedulingPolicyService.h>
 #include <utils/Log.h>
+#include <cutils/properties.h>
 
 #include "DeviceHalHidl.h"
 #include "EffectHalHidl.h"
@@ -229,6 +230,16 @@ bool StreamHalHidl::requestHalThreadPriority(pid_t threadPid, pid_t threadId) {
     if (mHalThreadPriority == HAL_THREAD_PRIORITY_DEFAULT) {
         return true;
     }
+
+    char value[PROPERTY_VALUE_MAX] = "";
+    property_get("persist.sys.bootvideo.enable",value, "false");
+    if(!strcmp(value, "true")) {
+        property_get("sys.bootvideo.closed", value, "0");
+        if (atoi(value) == 0){
+            return true;
+        }
+    }
+
     int err = requestPriority(
             threadPid, threadId,
             mHalThreadPriority, false /*isForApp*/, true /*asynchronous*/);

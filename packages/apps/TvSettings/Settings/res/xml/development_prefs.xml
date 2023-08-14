@@ -86,9 +86,27 @@
                         android:title="@string/debug_debugging_category">
 
         <SwitchPreference
+            android:key="enable_usb"
+            android:title="@string/enable_usb"
+            android:summary="@string/enable_usb_summary"
+            android:fragment="com.android.tv.settings.system.development.AdbDialog" />
+
+        <SwitchPreference
             android:key="enable_adb"
             android:title="@string/enable_adb"
             android:summary="@string/enable_adb_summary"
+            android:fragment="com.android.tv.settings.system.development.AdbDialog" />
+
+        <SwitchPreference
+            android:key="enable_internet_adb"
+            android:title="@string/enable_internet_adb"
+            android:summary="@string/enable_internet_adb_summary"
+            android:fragment="com.android.tv.settings.system.development.AdbDialog" />
+
+        <SwitchPreference
+            android:key="enable_abc"
+            android:title="@string/enable_abc"
+            android:summary="@string/enable_abc_summary"
             android:fragment="com.android.tv.settings.system.development.AdbDialog" />
 
         <Preference android:key="clear_adb_keys"
@@ -133,6 +151,14 @@
             android:dialogTitle="@string/select_logpersist_dialog_title"
             android:entries="@array/select_logpersist_titles"
             android:entryValues="@array/select_logpersist_values" />
+
+        <Preference
+            android:key="go_to_loader"
+            android:title="@string/go_to_loader"/>
+
+        <ListPreference
+            android:key="flash_img"
+            android:title="@string/select_img_to_flash" />
 
     </PreferenceCategory>
 

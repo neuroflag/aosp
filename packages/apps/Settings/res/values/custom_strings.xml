@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!-- deviceinfo  firefly version-->
+    <string name="firefly_version">Firefly version</string>
+
+    <!-- usb settings -->
+    <string name="connect_to_pc">Connect to PC</string>
+
+    <!--adb for abc -->
+    <string name="enable_abc" >"Android LogSave"</string>
+    <string name="enable_abc_summary" >"Log will be saved in /data/vendor/logs/"</string>
+
+    <string name="ethernet_settings_ext">Ethernet Aux</string>
+    <string name="ethernet_settings_title_ext">Ethernet 2</string>
+
+</resources>

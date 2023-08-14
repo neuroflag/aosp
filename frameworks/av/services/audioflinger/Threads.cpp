@@ -5164,6 +5164,17 @@ AudioFlinger::PlaybackThread::mixer_state AudioFlinger::MixerThread::prepareTrac
             float vlf, vrf, vaf;   // in [0.0, 1.0] float format
             // read original volumes with volume control
             float v = masterVolume * mStreamTypes[track->streamType()].volume;
+
+            char value[PROPERTY_VALUE_MAX] = "";
+            property_get("persist.sys.bootvideo.enable",value, "false");
+            if(!strcmp(value, "true")) {
+                property_get("sys.bootvideo.closed", value, "1");
+                if (atoi(value) == 0){
+                    ALOGV("boot running now,audioflinger no need to control volume");
+                    v = 1.0;
+                }
+            }
+
             // Always fetch volumeshaper volume to ensure state is updated.
             const sp<AudioTrackServerProxy> proxy = track->mAudioTrackServerProxy;
             const float vh = track->getVolumeHandler()->getVolume(
@@ -6062,6 +6073,12 @@ bool AudioFlinger::DirectOutputThread::shouldStandby_l()
     bool trackPaused = false;
     bool trackStopped = false;
 
+    // add by hh@rock-chips.com for audio bitstream
+    // put the HAL in standby when HAL is bitstream mode and audio track is paused
+    audio_format_t mainFormat = audio_get_main_format(mFormat);
+    if ((mType == DIRECT) && (mainFormat == AUDIO_FORMAT_IEC61937) && !usesHwAvSync()) {
+        return !mStandby;
+    }
     // do not put the HAL in standby when paused. AwesomePlayer clear the offloaded AudioTrack
     // after a timeout and we will enter standby then.
     if (mTracks.size() > 0) {

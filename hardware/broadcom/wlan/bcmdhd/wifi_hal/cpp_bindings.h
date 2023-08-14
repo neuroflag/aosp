@@ -101,9 +101,6 @@ public:
         return mAttributes[attribute] ? nla_data(mAttributes[attribute]) : NULL;
     }
 
-    void *get_string(int attribute) {
-        return mAttributes[attribute] ? nla_get_string(mAttributes[attribute]) : NULL;
-    }
 private:
     WifiEvent(const WifiEvent&);        // hide copy constructor to prevent copies
 };
@@ -145,9 +142,6 @@ public:
     }
     int get_len() {
         return nla_len(pos);
-    }
-    void* get_string() {
-        return nla_get_string(pos);
     }
 private:
     nl_iterator(const nl_iterator&);    // hide copy constructor to prevent copies
@@ -198,9 +192,6 @@ public:
 
     int put(int attribute, void *ptr, unsigned len) {
         return nla_put(mMsg, attribute, len, ptr);
-    }
-    int put_s8(int attribute, int8_t value) {
-        return nla_put(mMsg, attribute, sizeof(value), &value);
     }
     int put_u8(int attribute, uint8_t value) {
         return nla_put(mMsg, attribute, sizeof(value), &value);
@@ -376,5 +367,3 @@ private:
         nla_ok(pos, rem); \
         pos = (nlattr *)nla_next(pos, &(rem)))
 
-extern void InitResponseLock();
-extern void DestroyResponseLock();

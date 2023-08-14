@@ -18,6 +18,7 @@ package com.android.camera.one.v2.commands;
 
 import android.hardware.camera2.CameraAccessException;
 
+import com.android.camera.debug.Log;
 import com.android.camera.one.v2.camera2proxy.CameraCaptureSessionClosedException;
 import com.android.camera.one.v2.core.FrameServer;
 import com.android.camera.one.v2.core.RequestBuilder;
@@ -32,6 +33,8 @@ public class PreviewCommand implements CameraCommand {
     private final FrameServer mFrameServer;
     private final RequestBuilder.Factory mBuilderFactory;
     private final int mRequestType;
+    
+    private final Log.Tag TAG = new Log.Tag("PreviewCommand");
 
     /**
      * Constructs a Preview. Note that it is the responsibility of the
@@ -49,6 +52,7 @@ public class PreviewCommand implements CameraCommand {
     public void run() throws InterruptedException, CameraAccessException,
             CameraCaptureSessionClosedException, ResourceAcquisitionFailedException {
         try (FrameServer.Session session = mFrameServer.createExclusiveSession()) {
+            Log.d(TAG, "PreviewCommand run");
             RequestBuilder photoRequest = mBuilderFactory.create(mRequestType);
             session.submitRequest(Arrays.asList(photoRequest.build()),
                     FrameServer.RequestType.REPEATING);

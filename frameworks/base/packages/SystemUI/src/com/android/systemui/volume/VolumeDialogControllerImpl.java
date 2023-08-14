@@ -465,15 +465,19 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     private boolean shouldShowUI(int flags) {
+        if (mShowVolumeDialog && mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION)) {
+            return flags != 0 ? true : false;
+        }
         // if status bar isn't null, check if phone is in AOD, else check flags
         // since we could be using a different status bar
         return mStatusBarOptionalLazy.map(statusBarLazy -> {
             StatusBar statusBar = statusBarLazy.get();
-            return statusBar.getWakefulnessState() != WakefulnessLifecycle.WAKEFULNESS_ASLEEP
-                    && statusBar.getWakefulnessState()
-                    != WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP
-                    && statusBar.isDeviceInteractive() && (flags & AudioManager.FLAG_SHOW_UI) != 0
-                    && mShowVolumeDialog;
+            // return statusBar.getWakefulnessState() != WakefulnessLifecycle.WAKEFULNESS_ASLEEP
+            //         && statusBar.getWakefulnessState()
+            //         != WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP
+            //         && statusBar.isDeviceInteractive() && (flags & AudioManager.FLAG_SHOW_UI) != 0
+            //         && mShowVolumeDialog;
+            return mShowVolumeDialog && (flags & AudioManager.FLAG_SHOW_UI) != 0;         
         }).orElse(
                 mShowVolumeDialog && (flags & AudioManager.FLAG_SHOW_UI) != 0);
     }

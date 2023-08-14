@@ -118,9 +118,9 @@ public class OneCameraFeatureConfigCreator {
 
                 // On LIMITED devices starting with L-MR1 we run a simple YUV
                 // capture mode.
-                if (supportedLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED) {
+                /*if (supportedLevel == CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED) {
                     return CaptureSupportLevel.LIMITED_YUV;
-                }
+                }*/
 
                 // We should never get here. If we do, let's fall back to a mode
                 // that should work on all non-LEGACY devices.
@@ -169,6 +169,7 @@ public class OneCameraFeatureConfigCreator {
                 int override = GservicesHelper.getCaptureSupportLevelOverrideBack(contentResolver);
                 return CaptureSupportLevel.fromFlag(override);
             }
+            case CameraCharacteristics.LENS_FACING_EXTERNAL:
             case CameraCharacteristics.LENS_FACING_FRONT: {
                 int override = GservicesHelper.getCaptureSupportLevelOverrideFront(contentResolver);
                 return CaptureSupportLevel.fromFlag(override);

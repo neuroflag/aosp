@@ -309,6 +309,9 @@
     <protected-broadcast android:name="android.net.conn.BACKGROUND_DATA_SETTING_CHANGED" />
     <protected-broadcast android:name="android.net.conn.CAPTIVE_PORTAL_TEST_COMPLETED" />
 
+    <protected-broadcast android:name="android.net.ethernet.ETHERNET_STATE_CHANGED" />
+    <protected-broadcast android:name="android.net.ethernet.ETHERNET_IFACE_STATE_CHANGED" />
+
     <protected-broadcast android:name="android.net.nsd.STATE_CHANGED" />
 
     <protected-broadcast android:name="android.nfc.action.ADAPTER_STATE_CHANGED" />
@@ -667,6 +670,11 @@
     <!-- For tether entitlement recheck-->
     <protected-broadcast
         android:name="com.android.server.connectivity.tethering.PROVISIONING_RECHECK_ALARM" />
+
+    <!-- Added by firefly -->
+    <protected-broadcast android:name="action.SHOW_STATUSBAR" />
+    <protected-broadcast android:name="action.HIDE_STATUSBAR" />
+
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
     <!-- ====================================================================== -->

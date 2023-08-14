@@ -2275,6 +2275,20 @@ class DatabaseHelper extends SQLiteOpenHelper {
             loadIntegerSetting(stmt, Settings.System.POINTER_SPEED,
                     R.integer.def_pointer_speed);
 
+            loadIntegerSetting(stmt, Settings.System.SCREENSHOT_BUTTON_SHOW,
+                    R.integer.def_screenshot_button_show);
+
+            loadBooleanSetting(stmt, Settings.System.ENABLE_ROTATION_BY_USER,
+                    R.bool.def_enable_rotation_by_user);
+
+            loadBooleanSetting(stmt, Settings.System.HIDEBAR_BUTTON_SHOW,
+                    R.bool.def_hidebar_button_show);
+
+            loadBooleanSetting(stmt, Settings.System.ALWAYS_HIDE_BAR,
+                    R.bool.def_always_hide_bar);
+
+            loadStringSetting(stmt, Settings.System.SHUTDOWN_COMPONENT_NAME,
+                    R.string.def_shutdown_component_name);
             /*
              * IMPORTANT: Do not add any more upgrade steps here as the global,
              * secure, and system settings are no longer stored in a database
@@ -2322,11 +2336,22 @@ class DatabaseHelper extends SQLiteOpenHelper {
             //loadSetting(stmt, Settings.Secure.ADB_ENABLED, 0);
 
             // Allow mock locations default, based on build
+
+            loadStringSetting(stmt, Settings.Secure.ENABLED_INPUT_METHODS,
+                    R.string.config_enabledInputMethods);
+            
+            loadStringSetting(stmt, Settings.Secure.DEFAULT_INPUT_METHOD,
+                    R.string.config_defaultdInputMethods);
+
+
             loadSetting(stmt, Settings.Secure.ALLOW_MOCK_LOCATION,
                     "1".equals(SystemProperties.get("ro.allow.mock.location")) ? 1 : 0);
 
             loadSecure35Settings(stmt);
 
+            loadBooleanSetting(stmt, Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD,
+                    R.bool.def_show_ime_with_hard_keyboard);
+            
             loadBooleanSetting(stmt, Settings.Secure.MOUNT_PLAY_NOTIFICATION_SND,
                     R.bool.def_mount_play_notification_snd);
 
@@ -2353,6 +2378,11 @@ class DatabaseHelper extends SQLiteOpenHelper {
             } else {
                 loadBooleanSetting(stmt, Settings.System.LOCKSCREEN_DISABLED,
                         R.bool.def_lockscreen_disabled);
+            }
+
+            if (SystemProperties.get("ro.target.product","").equals("box")) {
+                loadBooleanSetting(stmt, Settings.Secure.TV_USER_SETUP_COMPLETE,
+                    R.bool.def_tv_user_setup_complete);
             }
 
             loadBooleanSetting(stmt, Settings.Secure.SCREENSAVER_ENABLED,
@@ -2393,6 +2423,9 @@ class DatabaseHelper extends SQLiteOpenHelper {
             loadIntegerSetting(stmt, Settings.Secure.SLEEP_TIMEOUT,
                     R.integer.def_sleep_timeout);
 
+            loadBooleanSetting(stmt, Settings.Secure.CAMERA_DOUBLE_TAP_POWER_GESTURE_DISABLED,
+                    R.bool.def_camera_double_tap_power_gesture_disable);
+
             /*
              * IMPORTANT: Do not add any more upgrade steps here as the global,
              * secure, and system settings are no longer stored in a database
@@ -2429,6 +2462,9 @@ class DatabaseHelper extends SQLiteOpenHelper {
 
             loadStringSetting(stmt, Settings.Global.AIRPLANE_MODE_RADIOS,
                     R.string.def_airplane_mode_radios);
+
+            loadStringSetting(stmt, Settings.Global.NTP_SERVER,
+                    R.string.def_ntp_server);
 
             loadStringSetting(stmt, Settings.Global.AIRPLANE_MODE_TOGGLEABLE_RADIOS,
                     R.string.airplane_mode_toggleable_radios);

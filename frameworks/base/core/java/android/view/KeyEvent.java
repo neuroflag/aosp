@@ -825,12 +825,15 @@ public class KeyEvent extends InputEvent implements Parcelable {
      */
     public static final int KEYCODE_PROFILE_SWITCH = 288;
 
+    public static final int KEYCODE_RECOVERY = 289;
+    public static final int KEYCODE_CUSTOM_POWER = 290;
+
     /**
      * Integer value of the last KEYCODE. Increases as new keycodes are added to KeyEvent.
      * @hide
      */
     @TestApi
-    public static final int LAST_KEYCODE = KEYCODE_PROFILE_SWITCH;
+    public static final int LAST_KEYCODE = KEYCODE_CUSTOM_POWER;
 
     // NOTE: If you add a new keycode here you must also add it to:
     //  isSystem()

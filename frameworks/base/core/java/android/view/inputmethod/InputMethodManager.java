@@ -3138,6 +3138,15 @@ public final class InputMethodManager {
                 + " mCursorCandEnd=" + mCursorCandEnd);
     }
 
+    public void commitText(@NonNull String text) {
+        try {
+            mService.commitText(text);
+        } catch (RemoteException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
     /**
      * Callback that is invoked when an input event that was dispatched to
      * the IME has been finished.

@@ -731,6 +731,8 @@ interface IPackageManager {
 
     boolean isPackageStateProtected(String packageName, int userId);
 
+    int getPackagePerformanceMode(String pkgName);
+
     void sendDeviceCustomizationReadyBroadcast();
 
     List<ModuleInfo> getInstalledModules(int flags);
@@ -787,4 +789,9 @@ interface IPackageManager {
     boolean isAutoRevokeWhitelisted(String packageName);
 
     void grantImplicitAccess(int queryingUid, String visibleAuthority);
+
+    //For UiMode
+    void setPackageUiModeType(String packageName, int oldUiMode, int newUiMode);
+
+    int getPackageUiModeType(String packageName);
 }

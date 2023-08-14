@@ -31,18 +31,28 @@ import android.annotation.TestApi;
 import android.app.PropertyInvalidatedCache;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
+import android.os.Environment;
 import android.service.dreams.Sandman;
 import android.sysprop.InitProperties;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
+import android.util.Xml;
 
 import com.android.internal.util.Preconditions;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.List;
+
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserException;
 
 /**
  * This class gives you control of the power state of the device.
@@ -653,6 +663,11 @@ public final class PowerManager {
     public static final String REBOOT_REQUESTED_BY_DEVICE_OWNER = "deviceowner";
 
     /**
+     * @hide
+     */
+    public static final int PERFORMANCE_MODE_NORMAL = 0;
+
+    /**
      * The 'reason' value used when rebooting in safe mode
      * @hide
      */
@@ -928,6 +943,13 @@ public final class PowerManager {
     private final ArrayMap<OnThermalStatusChangedListener, IThermalStatusListener>
             mListenerMap = new ArrayMap<>();
 
+    private File alarmFilter;
+    private File rootDir;
+    /**
+     * @hide
+     */
+    public  List<String> packageList = new ArrayList<String>();
+
     /**
      * {@hide}
      */
@@ -937,6 +959,50 @@ public final class PowerManager {
         mService = service;
         mThermalService = thermalService;
         mHandler = handler;
+
+        //create a xml file to list the packages that will be filterd
+        rootDir = Environment.getRootDirectory();
+        alarmFilter = new File(rootDir, "etc/wake_lock_filter.xml");
+        resolve(alarmFilter);
+    }
+
+    /**
+     * {@hide}
+     */
+    private void resolve(File file) {
+        if (!file.exists()) {
+            Slog.d(TAG, " Failed while trying resolve alarm filter file, not exists ");
+            return;
+        }
+
+        FileInputStream stream = null;
+        try {
+            stream = new FileInputStream(file);
+            XmlPullParser parser = Xml.newPullParser();
+            parser.setInput(stream, null);
+
+            int type;
+            do {
+                type = parser.next();
+                if (type == XmlPullParser.START_TAG) {
+                    String tag = parser.getName();
+                    if ("app".equals(tag)) {
+                        String pkgName = parser.getAttributeValue(null, "package");
+                        packageList.add(pkgName);
+                    }
+                }
+            } while (type != XmlPullParser.END_DOCUMENT);
+        } catch (Exception e) {
+            Slog.w(TAG, "Warning, failed parsing wake_lock_filter.xml: " + e);
+        } finally {
+            if (stream != null) {
+                try{
+                    stream.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
     }
 
     private PowerWhitelistManager getPowerWhitelistManager() {
@@ -2414,6 +2480,14 @@ public final class PowerManager {
             mInternalCount++;
             mExternalCount++;
             if (!mRefCounted || mInternalCount == 1) {
+                for (int i=0; i<packageList.size(); i++) {
+                    String pckname = packageList.get(i);
+                    //Slog.d(TAG, "--------------------pckname111="+pckname+",mPackageName="+mPackageName);
+                    if (mPackageName.equals(pckname) || mTag.equals(pckname)) {
+                        //Slog.d(TAG, "--------------------pckname="+pckname+" not acquireLocked");
+                        return;
+                    }
+                }
                 // Do this even if the wake lock is already thought to be held (mHeld == true)
                 // because non-reference counted wake locks are not always properly released.
                 // For example, the keyguard's wake lock might be forcibly released by the

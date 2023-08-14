@@ -381,6 +381,14 @@ public interface InputMethod {
     public void changeInputMethodSubtype(InputMethodSubtype subtype);
 
     /**
+     * @hide
+     * @param text
+     */
+    @MainThread
+    public void commitText(String text);
+
+
+    /**
      * Update token of the client window requesting {@link #showSoftInput(int, ResultReceiver)}
      * @param showInputToken dummy app window token for window requesting
      *        {@link InputMethodManager#showSoftInput(View, int)}

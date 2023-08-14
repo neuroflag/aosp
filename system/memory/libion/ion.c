@@ -35,6 +35,10 @@
 
 #include <log/log.h>
 
+#ifdef LIBION_ROCKCHIP
+#include <linux/rockchip_ion.h>
+#endif
+
 #define ION_ABI_VERSION_MODULAR_HEAPS 2
 
 enum ion_version { ION_VERSION_UNKNOWN, ION_VERSION_MODERN, ION_VERSION_LEGACY };
@@ -71,7 +75,14 @@ int ion_close(int fd) {
 static int ion_ioctl(int fd, int req, void* arg) {
     int ret = ioctl(fd, req, arg);
     if (ret < 0) {
-        ALOGE("ioctl %x failed with code %d: %s", req, ret, strerror(errno));
+        if ( ION_IOC_FREE == req )
+        {
+            ALOGW("ION_IOC_FREE failed with code %d: %s; might be caused by that current kernel is NEW.", ret, strerror(errno));
+        }
+        else
+        {
+            ALOGE("ioctl %x failed with code %d: %s", req, ret, strerror(errno));
+        }
         return -errno;
     }
     return ret;
@@ -208,6 +219,62 @@ int ion_sync_fd(int fd, int handle_fd) {
 
     return ion_ioctl(fd, ION_IOC_SYNC, &data);
 }
+
+#ifdef LIBION_ROCKCHIP
+int ion_get_phys(int fd, ion_user_handle_t handle, unsigned long *phys)
+{
+    struct ion_phys_data phys_data;
+    struct ion_custom_data data;
+
+    phys_data.handle = handle;
+    phys_data.phys = 0;
+
+    data.cmd = ION_IOC_GET_PHYS;
+    data.arg = (unsigned long)&phys_data;
+
+    int ret = ion_ioctl(fd, ION_IOC_CUSTOM, &data);
+    if (ret<0)
+        return ret;
+
+    *phys = phys_data.phys;
+
+    return 0;
+}
+
+int ion_secure_free(int fd, size_t len, unsigned long phys)
+{
+    struct ion_phys_data phys_data;
+    struct ion_custom_data data;
+
+    phys_data.handle = 0;
+    phys_data.phys = phys;
+    phys_data.size = len;
+
+    data.cmd = ION_IOC_FREE_SECURE;
+    data.arg = (unsigned long)&phys_data;
+
+    return ion_ioctl(fd, ION_IOC_CUSTOM, &data);
+}
+
+int ion_secure_alloc(int fd, size_t len, unsigned long *phys)
+{
+    struct ion_phys_data phys_data;
+    struct ion_custom_data data;
+
+    phys_data.handle = 0;
+    phys_data.size = len;
+
+    data.cmd = ION_IOC_ALLOC_SECURE;
+    data.arg = (unsigned long)&phys_data;
+
+    int ret = ion_ioctl(fd, ION_IOC_CUSTOM, &data);
+    if (ret<0)
+        return ret;
+
+    *phys = phys_data.phys;
+    return ret;
+}
+#endif
 
 int ion_query_heap_cnt(int fd, int* cnt) {
     int ret;

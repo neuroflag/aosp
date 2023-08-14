@@ -43,6 +43,9 @@
 #include <libsnapshot/snapshot.h>
 
 #include "block_dev_initializer.h"
+/* for firefly virtual devices */
+#include "virtual_dev_initializer.h"
+
 #include "devices.h"
 #include "switch_root.h"
 #include "uevent.h"
@@ -115,6 +118,7 @@ class FirstStageMount {
     std::string super_path_;
     std::string super_partition_name_;
     BlockDevInitializer block_dev_init_;
+
     // Reads all AVB keys before chroot into /system, as they might be used
     // later when mounting other partitions, e.g., /vendor and /product.
     std::map<std::string, std::vector<std::string>> preload_avb_key_blobs_;
@@ -302,6 +306,7 @@ bool FirstStageMount::InitRequiredDevices(std::set<std::string> devices) {
     if (devices.empty()) {
         return true;
     }
+
     return block_dev_init_.InitDevices(std::move(devices));
 }
 
@@ -798,6 +803,16 @@ bool FirstStageMountVBootV2::InitAvbHandle() {
 // ----------------
 // Mounts partitions specified by fstab in device tree.
 bool DoFirstStageMount() {
+    if(android::fs_mgr::GetBootTypeVirtualDisk()){
+        VirtualDevInitializer virdev;    
+        if(!virdev.InitVirtualDevices()){
+            return false;
+        }else{
+            if(!virdev.AssociateDevices()){
+                return false;
+            }
+        }
+    }
     // Skips first stage mount if we're in recovery mode.
     if (IsRecoveryMode()) {
         LOG(INFO) << "First stage mount skipped (recovery mode)";

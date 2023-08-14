@@ -127,6 +127,11 @@ public class Monkey {
     private boolean mRequestDumpsysMemInfo = false;
 
     /**
+     * Catch dma_buf info if --dump-dmabuf is set
+     */
+    private boolean mRequestDmabuf = false;
+
+    /**
      * This is set by the ActivityController thread to request a
      * bugreport after ANR
      */
@@ -424,6 +429,14 @@ public class Monkey {
      */
     private void reportProcRank() {
         commandLineReport("procrank", "procrank");
+    }
+
+    /**
+     * Required kernel config DEBUGFS, catch dma_buf info.
+     */
+    private void reportDmaBuf() {
+        commandLineReport("dmabuf_info", "cat /d/dma_buf/bufinfo");
+        commandLineReport("dmabuf_procs", "cat /d/dma_buf/bufprocs");
     }
 
     /**
@@ -897,6 +910,8 @@ public class Monkey {
                 } else if (opt.equals("-h")) {
                     showUsage();
                     return false;
+                } else if (opt.equals("--dump-dmabuf")) {
+                    mRequestDmabuf = true;
                 } else {
                     Logger.err.println("** Error: Unknown option: " + opt);
                     showUsage();
@@ -1119,6 +1134,9 @@ public class Monkey {
                     if (mRequestProcRank) {
                         reportProcRank();
                         mRequestProcRank = false;
+                        if (mRequestDmabuf) {
+                            reportDmaBuf();
+                        }
                     }
                     if (mRequestAnrTraces) {
                         mRequestAnrTraces = false;

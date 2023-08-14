@@ -341,7 +341,7 @@
     </string-array>
 
     <!-- Nav bar button default ordering/layout -->
-    <string name="config_navBarLayout" translatable="false">left[.5W],back[1WC];home;recent[1WC],right[.5W]</string>
+    <string name="config_navBarLayout" translatable="false">left[.5W];poweroff,hide_bar,volume_sub,back,home,recent,volume_add,screenshot,rotation;right[.5W]</string>
     <string name="config_navBarLayoutQuickstep" translatable="false">back[1.7WC];home;contextual[1.7WC]</string>
     <string name="config_navBarLayoutHandle" translatable="false">back[40AC];home_handle;ime_switcher[40AC]</string>
 
@@ -536,7 +536,6 @@
      -->
     <string-array name="config_statusBarIconBlackList" translatable="false">
         <item>@*android:string/status_bar_rotate</item>
-        <item>@*android:string/status_bar_headset</item>
     </string-array>
 
     <!-- A path similar to frameworks/base/core/res/res/values/config.xml

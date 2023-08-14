@@ -24,6 +24,7 @@ import java.util.Set;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CaptureRequest;
 
+import com.android.camera.debug.Log;
 import com.google.common.base.Optional;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
@@ -40,6 +41,7 @@ import com.google.common.base.Suppliers;
  * metering regions, auto-focus state listener, etc. applied.
  */
 public class RequestTemplate implements RequestBuilder.Factory, ResponseManager {
+    private static final Log.Tag TAG = new Log.Tag("RequestTemplate");
     private static class Parameter<T> {
         private final CaptureRequest.Key<T> key;
         private final Supplier<T> value;
@@ -50,6 +52,7 @@ public class RequestTemplate implements RequestBuilder.Factory, ResponseManager 
         }
 
         public void addToBuilder(RequestBuilder builder) {
+            Log.d(TAG, "builder.setParam:" + key + "," + value.get());
             builder.setParam(key, value.get());
         }
     }

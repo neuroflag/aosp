@@ -1203,7 +1203,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         }
 
         private boolean isTv() {
-            return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+            return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+                || mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION);
         }
 
         protected long getChargingFunctions() {

@@ -22,6 +22,7 @@
 #include "CursorScrollAccumulator.h"
 #include "TouchButtonAccumulator.h"
 #include "TouchCursorInputMapperCommon.h"
+#include <cutils/properties.h>
 
 namespace android {
 
@@ -674,6 +675,29 @@ void TouchInputMapper::configureSurface(nsecs_t when, bool* outResetNeeded) {
             int32_t naturalPhysicalWidth, naturalPhysicalHeight;
             int32_t naturalPhysicalLeft, naturalPhysicalTop;
             int32_t naturalDeviceWidth, naturalDeviceHeight;
+
+            if (!mParameters.associatedDisplayIsExternal) {
+                char value[PROPERTY_VALUE_MAX];
+                int orientation = 0;
+                property_get("persist.sys.rotation.einit", value, "0");
+                switch(atoi(value)){
+                    case 90:
+                        orientation = DISPLAY_ORIENTATION_90;
+                        break;
+                    case 180:
+                        orientation = DISPLAY_ORIENTATION_180;
+                        break;
+                    case 270:
+                        orientation = DISPLAY_ORIENTATION_270;
+                        break;
+                    case 0:
+                    default:
+                        orientation = DISPLAY_ORIENTATION_0;
+                        break;
+                }
+                mViewport.orientation = (mViewport.orientation + orientation) % 4;
+            }
+
             switch (mViewport.orientation) {
                 case DISPLAY_ORIENTATION_90:
                     naturalLogicalWidth = mViewport.logicalBottom - mViewport.logicalTop;

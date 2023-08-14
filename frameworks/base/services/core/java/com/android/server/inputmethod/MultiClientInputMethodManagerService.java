@@ -1457,6 +1457,11 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
+        public void commitText(String text) {
+        }
+
+        @BinderThread
+        @Override
         public List<InputMethodSubtype> getEnabledInputMethodSubtypeList(String imiId,
                 boolean allowsImplicitlySelectedSubtypes) {
             reportNotSupported();

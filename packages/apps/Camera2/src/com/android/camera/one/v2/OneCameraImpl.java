@@ -444,6 +444,12 @@ public class OneCameraImpl extends AbstractOneCamera {
         } catch (CameraAccessException e) {
             Log.e(TAG, "Could not abort captures in progress.");
         }
+
+        if (mCaptureImageReader.getSurface() != null)
+            mCaptureImageReader.getSurface().release();
+
+        if (mPreviewSurface != null)
+            mPreviewSurface.release();
         mIsClosed = true;
         mCameraThread.quitSafely();
         mDevice.close();

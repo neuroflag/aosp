@@ -98,6 +98,7 @@ static void drop_privs(uid_t uid, gid_t gid) {
     minijail_enter(j.get());
 }
 
+#define SDCARDFS_RESERVED_MB 100
 static bool sdcardfs_setup(const std::string& source_path, const std::string& dest_path,
                            uid_t fsuid, gid_t fsgid, bool multi_user, userid_t userid, gid_t gid,
                            mode_t mask, bool derive_gid, bool default_normal, bool unshared_obb,
@@ -116,8 +117,8 @@ static bool sdcardfs_setup(const std::string& source_path, const std::string& de
             new_opts += new_opts_list[j];
         }
 
-        auto opts = android::base::StringPrintf("fsuid=%d,fsgid=%d,%smask=%d,userid=%d,gid=%d",
-                                                fsuid, fsgid, new_opts.c_str(), mask, userid, gid);
+        auto opts = android::base::StringPrintf("fsuid=%d,fsgid=%d,%smask=%d,userid=%d,gid=%d,reserved_mb=%d",
+                                                fsuid, fsgid, new_opts.c_str(), mask, userid, gid,SDCARDFS_RESERVED_MB);
         if (mount(source_path.c_str(), dest_path.c_str(), use_esdfs ? "esdfs" : "sdcardfs",
                   MS_NOSUID | MS_NODEV | MS_NOEXEC | MS_NOATIME, opts.c_str()) == -1) {
             PLOG(WARNING) << "Failed to mount sdcardfs with options " << opts;

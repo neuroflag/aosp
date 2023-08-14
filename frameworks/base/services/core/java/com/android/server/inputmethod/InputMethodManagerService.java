@@ -1957,6 +1957,18 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
+    public void commitText(String text) {
+        if (mCurMethod != null) {
+            try {
+                mCurMethod.commitText(text);
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Failed to call commitText");
+            }
+        }
+
+    }
+
+    @Override
     public List<InputMethodInfo> getInputMethodList(@UserIdInt int userId) {
         if (UserHandle.getCallingUserId() != userId) {
             mContext.enforceCallingPermission(Manifest.permission.INTERACT_ACROSS_USERS_FULL, null);
@@ -3275,6 +3287,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     boolean hideCurrentInputLocked(IBinder windowToken, int flags, ResultReceiver resultReceiver,
             @SoftInputShowHideReason int reason) {
+        if (mCurClient == null || mCurClient.curSession == null) {
+            return false;
+        }
         if ((flags&InputMethodManager.HIDE_IMPLICIT_ONLY) != 0
                 && (mShowExplicitlyRequested || mShowForced)) {
             if (DEBUG) Slog.v(TAG, "Not hiding: explicit show not cancelled by non-explicit hide");
@@ -5422,6 +5437,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         return mService.handleShellCommandSetInputMethod(this);
                     case "reset":
                         return mService.handleShellCommandResetInputMethod(this);
+                    case "text":
+                        return mService.handleShellCommandTextInputMethod(this);
                     default:
                         getOutPrintWriter().println("Unknown command: " + imeCommand);
                         return ShellCommandResult.FAILURE;
@@ -5503,6 +5520,15 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 pw.print("--user <USER_ID>: Specify which user to reset.");
                 pw.println(" Assumes the current user if not specified.");
                 pw.decreaseIndent();
+                pw.decreaseIndent();
+
+                pw.println("text \"info\" ");
+                pw.increaseIndent();
+                pw.println("output text to connected device.");
+                pw.increaseIndent();
+                pw.println("--info: Output information.");
+                pw.decreaseIndent();
+
 
                 pw.decreaseIndent();
 
@@ -5797,6 +5823,27 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 out.println("Reset current and enabled IMEs for user #" + userId);
                 out.println("  Selected: " + nextIme);
                 nextEnabledImes.forEach(ime -> out.println("   Enabled: " + ime.getId()));
+            }
+        }
+        return ShellCommandResult.SUCCESS;
+    }
+
+    /**
+     * add by Firefly
+     * Handles {@code adb shell ime text}.
+     * @param shellCommand {@link ShellCommand} object that is handling this command.
+     * @return Exit code of the command.
+     */
+    @BinderThread
+    @ShellCommandResult
+    private int handleShellCommandTextInputMethod(@NonNull ShellCommand shellCommand) {
+       String mText = shellCommand.getNextArgRequired();
+        synchronized (mMethodMap) {
+            try {
+                commitText(mText);
+            } catch (Exception e) {
+                System.err.println("Error: " + e.getMessage());
+                return ShellCommandResult.FAILURE;
             }
         }
         return ShellCommandResult.SUCCESS;

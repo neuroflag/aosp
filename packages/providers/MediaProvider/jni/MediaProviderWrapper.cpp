@@ -60,9 +60,10 @@ std::unique_ptr<RedactionInfo> getRedactionInfoInternal(JNIEnv* env, jobject med
                                                         jmethodID mid_get_redaction_ranges,
                                                         uid_t uid, pid_t tid, const string& path) {
     ScopedLocalRef<jstring> j_path(env, env->NewStringUTF(path.c_str()));
-    ScopedLongArrayRO redaction_ranges(
+    ScopedLocalRef<jlongArray> redaction_ranges_local_ref(
             env, static_cast<jlongArray>(env->CallObjectMethod(
                          media_provider_object, mid_get_redaction_ranges, j_path.get(), uid, tid)));
+    ScopedLongArrayRO redaction_ranges(env, redaction_ranges_local_ref.get());
 
     if (CheckForJniException(env)) {
         return nullptr;
@@ -280,6 +281,10 @@ MediaProviderWrapper::MediaProviderWrapper(JNIEnv* env, jobject media_provider) 
                               /*is_static*/ false);
     mid_on_file_created_ = CacheMethod(env, "onFileCreated", "(Ljava/lang/String;)V",
                                        /*is_static*/ false);
+    mid_should_allow_lookup_ = CacheMethod(env, "shouldAllowLookup", "(II)Z",
+                                           /*is_static*/ false);
+    mid_is_app_clone_user_ = CacheMethod(env, "isAppCloneUser", "(I)Z",
+                                         /*is_static*/ false);
 }
 
 MediaProviderWrapper::~MediaProviderWrapper() {
@@ -421,6 +426,29 @@ void MediaProviderWrapper::OnFileCreated(const string& path) {
     JNIEnv* env = MaybeAttachCurrentThread();
 
     return onFileCreatedInternal(env, media_provider_object_, mid_on_file_created_, path);
+}
+
+bool MediaProviderWrapper::ShouldAllowLookup(uid_t uid, int path_user_id) {
+    JNIEnv* env = MaybeAttachCurrentThread();
+
+    bool res = env->CallBooleanMethod(media_provider_object_, mid_should_allow_lookup_, uid,
+                                      path_user_id);
+
+    if (CheckForJniException(env)) {
+        return false;
+    }
+    return res;
+}
+
+bool MediaProviderWrapper::IsAppCloneUser(uid_t userId) {
+    JNIEnv* env = MaybeAttachCurrentThread();
+
+    bool res = env->CallBooleanMethod(media_provider_object_, mid_is_app_clone_user_, userId);
+
+    if (CheckForJniException(env)) {
+        return false;
+    }
+    return res;
 }
 
 /*****************************************************************************************/

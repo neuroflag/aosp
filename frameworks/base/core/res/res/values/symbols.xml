@@ -2664,6 +2664,9 @@
   <java-symbol type="string" name="storage_usb_drive" />
   <java-symbol type="string" name="storage_usb_drive_label" />
   <java-symbol type="string" name="storage_usb" />
+  <java-symbol type="string" name="storage_pcie_drive" />
+  <java-symbol type="string" name="storage_harddisk_drive" />
+  <java-symbol type="string" name="storage_shareblock_drive" />
 
   <java-symbol type="drawable" name="ic_eject_24dp" />
   <java-symbol type="drawable" name="ic_folder_24dp" />
@@ -4057,4 +4060,6 @@
   <java-symbol type="array" name="config_notificationMsgPkgsAllowedAsConvos" />
 
   <java-symbol type="array" name="config_keep_warming_services" />
+
+  <java-symbol type="array" name="config_hideApksinLauncher" />
 </resources>

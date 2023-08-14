@@ -1,6 +1,8 @@
 userdebug_or_eng(`
   typeattribute su coredomain;
 
+  domain_auto_trans(init, su_exec, su)
+
   domain_auto_trans(shell, su_exec, su)
   # Allow dumpstate to call su on userdebug / eng builds to collect
   # additional information.
@@ -21,3 +23,43 @@ userdebug_or_eng(`
 
   app_domain(su)
 ')
+
+
+## Perms for the daemon
+
+  domain_trans(init, su_exec, sudaemon)
+
+  typeattribute sudaemon domain, coredomain, mlstrustedsubject;
+
+  domain_trans(init, su_exec, sudaemon)
+
+  # sudaemon is also permissive to permit setenforce.
+  permissive sudaemon;
+
+  # Add sudaemon to various domains
+  net_domain(sudaemon)
+  app_domain(sudaemon)
+
+  dontaudit sudaemon self:capability_class_set *;
+  dontaudit sudaemon kernel:security *;
+  dontaudit sudaemon kernel:system *;
+  dontaudit sudaemon self:memprotect *;
+  dontaudit sudaemon domain:process *;
+  dontaudit sudaemon domain:fd *;
+  dontaudit sudaemon domain:dir *;
+  dontaudit sudaemon domain:lnk_file *;
+  dontaudit sudaemon domain:{ fifo_file file } *;
+  dontaudit sudaemon domain:socket_class_set *;
+  dontaudit sudaemon domain:ipc_class_set *;
+  dontaudit sudaemon domain:key *;
+  dontaudit sudaemon fs_type:filesystem *;
+  dontaudit sudaemon {fs_type dev_type file_type}:dir_file_class_set *;
+  dontaudit sudaemon node_type:node *;
+  dontaudit sudaemon node_type:{ tcp_socket udp_socket rawip_socket } *;
+  dontaudit sudaemon netif_type:netif *;
+  dontaudit sudaemon port_type:socket_class_set *;
+  dontaudit sudaemon port_type:{ tcp_socket dccp_socket } *;
+  dontaudit sudaemon domain:peer *;
+  dontaudit sudaemon domain:binder *;
+  dontaudit sudaemon property_type:property_service *;
+  dontaudit sudaemon appops_service:service_manager *;

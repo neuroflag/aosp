@@ -18,6 +18,7 @@ package com.android.camera.one.v2;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
+import com.android.ex.camera2.portability.CameraCapabilities.WhiteBalance;
 import android.annotation.TargetApi;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
@@ -38,7 +39,9 @@ import com.android.camera.util.Size;
 import com.google.common.primitives.Floats;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Describes a OneCamera device which is on top of camera2 API. This is
@@ -202,7 +205,9 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
         }
         Range<Integer> compensationRange =
                 mCameraCharacteristics.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE);
-        return compensationRange.getLower() != 0 || compensationRange.getUpper() != 0;
+        boolean ae_lock_available = mCameraCharacteristics.get(
+                CameraCharacteristics.CONTROL_AE_LOCK_AVAILABLE);
+        return (compensationRange.getLower() != 0 || compensationRange.getUpper() != 0) && ae_lock_available;
     }
 
     @Override
@@ -263,5 +268,63 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
               CameraCharacteristics.CONTROL_MAX_REGIONS_AE);
         // Auto-Exposure is supported if the device supports one or more AE regions
         return maxAeRegions != null && maxAeRegions > 0;
+    }
+    
+    @Override
+    public boolean isWhiteBalanceSupported() {
+        // TODO Auto-generated method stub
+        boolean awb_lock_available = mCameraCharacteristics.get(
+                CameraCharacteristics.CONTROL_AWB_LOCK_AVAILABLE);
+        Set<WhiteBalance> SupportedWhiteBalances = getSupportedWhiteBalances();
+        boolean awb_supported = SupportedWhiteBalances != null && SupportedWhiteBalances.size() > 0;
+        return awb_lock_available && awb_supported;
+    }
+    
+    @Override
+    public Set<WhiteBalance> getSupportedWhiteBalances() {
+        // TODO Auto-generated method stub
+        EnumSet<WhiteBalance> SupportedWhiteBalances =
+                EnumSet.noneOf(WhiteBalance.class);
+        int[] bals = mCameraCharacteristics.get(CameraCharacteristics.CONTROL_AWB_AVAILABLE_MODES);
+        if (bals != null) {
+            for (int bal : bals) {
+                WhiteBalance equiv = whiteBalanceFromInt(bal);
+                if (equiv != null) {
+                    SupportedWhiteBalances.add(equiv);
+                }
+            }
+        }
+        return SupportedWhiteBalances;
+    }
+    
+    /**
+     * Converts the API-related integer representation of the white balance to
+     * the abstract representation.
+     *
+     * @param wb The integral representation.
+     * @return The balance represented by the input integer, or {@code null} if
+     *         it cannot be converted.
+     */
+    public WhiteBalance whiteBalanceFromInt(int wb) {
+        switch (wb) {
+            case CameraCharacteristics.CONTROL_AWB_MODE_AUTO:
+                return WhiteBalance.AUTO;
+            case CameraCharacteristics.CONTROL_AWB_MODE_CLOUDY_DAYLIGHT:
+                return WhiteBalance.CLOUDY_DAYLIGHT;
+            case CameraCharacteristics.CONTROL_AWB_MODE_DAYLIGHT:
+                return WhiteBalance.DAYLIGHT;
+            case CameraCharacteristics.CONTROL_AWB_MODE_FLUORESCENT:
+                return WhiteBalance.FLUORESCENT;
+            case CameraCharacteristics.CONTROL_AWB_MODE_INCANDESCENT:
+                return WhiteBalance.INCANDESCENT;
+            case CameraCharacteristics.CONTROL_AWB_MODE_SHADE:
+                return WhiteBalance.SHADE;
+            case CameraCharacteristics.CONTROL_AWB_MODE_TWILIGHT:
+                return WhiteBalance.TWILIGHT;
+            case CameraCharacteristics.CONTROL_AWB_MODE_WARM_FLUORESCENT:
+                return WhiteBalance.WARM_FLUORESCENT;
+        }
+        Log.w(TAG, "Unable to convert from API 2 white balance: " + wb);
+        return null;
     }
 }

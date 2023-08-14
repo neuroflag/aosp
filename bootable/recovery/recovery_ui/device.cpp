@@ -88,6 +88,7 @@ int Device::HandleMenuKey(int key, bool visible) {
 
     case KEY_ENTER:
     case KEY_POWER:
+    case BTN_LEFT:
       return kInvokeItem;
 
     default:

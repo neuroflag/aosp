@@ -770,6 +770,18 @@ public class InputMethodService extends AbstractInputMethodService {
 
         /**
          * {@inheritDoc}
+         */
+        @MainThread
+        @Override
+        public void commitText(@NonNull String text){
+            InputConnection ic = getCurrentInputConnection();
+            if (ic != null){
+                ic.commitText(text, 1);
+            }
+        }
+        
+        /**
+         * {@inheritDoc}
          * @hide
          */
         @Override

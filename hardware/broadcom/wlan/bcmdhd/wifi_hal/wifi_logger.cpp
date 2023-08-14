@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+#include <string>
 #include <stdint.h>
 #include <fcntl.h>
 #include <sys/socket.h>
@@ -33,8 +33,6 @@
 #include <netlink/socket.h>
 #include <netlink-private/object-api.h>
 #include <netlink-private/types.h>
-#include <unistd.h>
-
 
 #include "nl80211_copy.h"
 #include "sync.h"
@@ -46,10 +44,7 @@
 #include "wifi_hal.h"
 #include "common.h"
 #include "cpp_bindings.h"
-#include "brcm_version.h"
-#define WIFI_HAL_EVENT_SOCK_PORT     645
 
-#define ARRAYSIZE(a)	(u8)(sizeof(a) / sizeof(a[0]))
 typedef enum {
     LOGGER_START_LOGGING = ANDROID_NL80211_SUBCMD_DEBUG_RANGE_START,
     LOGGER_TRIGGER_MEM_DUMP,
@@ -64,12 +59,7 @@ typedef enum {
     LOGGER_START_PKT_FATE_MONITORING,
     LOGGER_GET_TX_PKT_FATES,
     LOGGER_GET_RX_PKT_FATES,
-    LOGGER_GET_WAKE_REASON_STATS,
-    LOGGER_DEBUG_GET_DUMP,
-    LOGGER_FILE_DUMP_DONE_IND,
-    LOGGER_SET_HAL_START,
-    LOGGER_HAL_STOP,
-    LOGGER_SET_HAL_PID
+    LOGGER_GET_WAKE_REASON_STATS
 } DEBUG_SUB_COMMAND;
 
 typedef enum {
@@ -83,7 +73,7 @@ typedef enum {
     LOGGER_ATTRIBUTE_LOG_MIN_DATA_SIZE,
     LOGGER_ATTRIBUTE_FW_DUMP_LEN,
     LOGGER_ATTRIBUTE_FW_DUMP_DATA,
-    LOGGER_ATTRIBUTE_FW_ERR_CODE,
+    // LOGGER_ATTRIBUTE_FW_ERR_CODE,
     LOGGER_ATTRIBUTE_RING_DATA,
     LOGGER_ATTRIBUTE_RING_STATUS,
     LOGGER_ATTRIBUTE_RING_NUM,
@@ -140,14 +130,6 @@ enum wake_stat_attributes {
     WAKE_STAT_ATTRIBUTE_RX_MULTICAST_PKT_INFO
 };
 
-typedef enum {
-    SET_HAL_START_ATTRIBUTE_DEINIT = 0x0001,
-    SET_HAL_START_ATTRIBUTE_PRE_INIT = 0x0002,
-    SET_HAL_START_ATTRIBUTE_EVENT_SOCK_PID = 0x0003
-} SET_HAL_START_ATTRIBUTE;
-
-#define HAL_START_REQUEST_ID 2
-
 ///////////////////////////////////////////////////////////////////////////////
 class DebugCommand : public WifiCommand
 {
@@ -171,62 +153,26 @@ public:
         : WifiCommand("DebugCommand", iface, 0), mBuff(buffer), mBuffSize(buffer_size), mType
         (cmdType)
     {
-        mNumRings =  NULL;
-        mStatus = NULL;
-        mSupport = NULL;
-        mVerboseLevel = 0;
-        mFlags = 0;
-        mMaxIntervalSec = 0;
-        mMinDataSize = 0;
-        mRingName = NULL;
         memset(mBuff, 0, *mBuffSize);
     }
 
     // constructor for ring data
     DebugCommand(wifi_interface_handle iface, char *ring_name, GetCmdType cmdType)
         : WifiCommand("DebugCommand", iface, 0), mRingName(ring_name), mType(cmdType)
-    {
-        mBuff = NULL;
-        mBuffSize = NULL;
-        mNumRings =  NULL;
-        mStatus = NULL;
-        mSupport = NULL;
-        mVerboseLevel = 0;
-        mFlags = 0;
-        mMaxIntervalSec = 0;
-        mMinDataSize = 0;
-    }
+    { }
 
     // constructor for ring status
     DebugCommand(wifi_interface_handle iface, u32 *num_rings,
             wifi_ring_buffer_status *status, GetCmdType cmdType)
         : WifiCommand("DebugCommand", iface, 0), mNumRings(num_rings), mStatus(status), mType(cmdType)
     {
-        mBuff = NULL;
-        mBuffSize = NULL;
-        mSupport = NULL;
-        mVerboseLevel = 0;
-        mFlags = 0;
-        mMaxIntervalSec = 0;
-        mMinDataSize = 0;
-        mRingName = NULL;
         memset(mStatus, 0, sizeof(wifi_ring_buffer_status) * (*mNumRings));
     }
 
     // constructor for feature set
     DebugCommand(wifi_interface_handle iface, unsigned int *support, GetCmdType cmdType)
         : WifiCommand("DebugCommand", iface, 0), mSupport(support), mType(cmdType)
-    {
-        mBuff = NULL;
-        mBuffSize = NULL;
-        mNumRings =  NULL;
-        mStatus = NULL;
-        mVerboseLevel = 0;
-        mFlags = 0;
-        mMaxIntervalSec = 0;
-        mMinDataSize = 0;
-        mRingName = NULL;
-    }
+    { }
 
     // constructor for ring params
     DebugCommand(wifi_interface_handle iface, u32 verbose_level, u32 flags,
@@ -234,13 +180,7 @@ public:
         : WifiCommand("DebugCommand", iface, 0), mVerboseLevel(verbose_level), mFlags(flags),
         mMaxIntervalSec(max_interval_sec), mMinDataSize(min_data_size),
         mRingName(ring_name), mType(cmdType)
-    {
-        mBuff = NULL;
-        mBuffSize = NULL;
-        mNumRings =  NULL;
-        mStatus = NULL;
-        mSupport = NULL;
-    }
+    { }
 
     int createRingRequest(WifiRequest& request) {
         int result = request.create(GOOGLE_OUI, LOGGER_START_LOGGING);
@@ -486,6 +426,11 @@ public:
 wifi_error wifi_get_firmware_version(wifi_interface_handle iface, char *buffer,
         int buffer_size)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        std::string pFirmwareVer = "WIFI_FIRMWARE";
+        memcpy(buffer, pFirmwareVer.c_str(), pFirmwareVer.length()+1);
+        return WIFI_SUCCESS;
+    }
     if (buffer && (buffer_size > 0)) {
         DebugCommand *cmd = new DebugCommand(iface, buffer, &buffer_size, GET_FW_VER);
         NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
@@ -501,6 +446,11 @@ wifi_error wifi_get_firmware_version(wifi_interface_handle iface, char *buffer,
 /* API to collect a driver version string */
 wifi_error wifi_get_driver_version(wifi_interface_handle iface, char *buffer, int buffer_size)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        std::string pDriverVer = "WIFI_DRIVER";
+        memcpy(buffer, pDriverVer.c_str(), pDriverVer.length()+1);
+        return WIFI_SUCCESS;
+    }
     if (buffer && (buffer_size > 0)) {
         DebugCommand *cmd = new DebugCommand(iface, buffer, &buffer_size, GET_DRV_VER);
         NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
@@ -516,6 +466,9 @@ wifi_error wifi_get_driver_version(wifi_interface_handle iface, char *buffer, in
 /* API to collect driver records */
 wifi_error wifi_get_ring_data(wifi_interface_handle iface, char *ring_name)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        return WIFI_SUCCESS;
+    }
     DebugCommand *cmd = new DebugCommand(iface, ring_name, GET_RING_DATA);
     NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
     wifi_error result = (wifi_error)cmd->start();
@@ -527,6 +480,14 @@ wifi_error wifi_get_ring_data(wifi_interface_handle iface, char *ring_name)
 wifi_error wifi_get_ring_buffers_status(wifi_interface_handle iface,
         u32 *num_rings, wifi_ring_buffer_status *status)
 {
+	if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+		wifi_ring_buffer_status* pLocalstatus = NULL;
+		std::string from = "WIFI_RING";
+		memcpy(status->name, from.c_str(), strlen(from.c_str())+1);
+		*num_rings = 1;
+
+		return  WIFI_SUCCESS;
+	}
     if (status && num_rings) {
         DebugCommand *cmd = new DebugCommand(iface, num_rings, status, GET_RING_STATUS);
         NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
@@ -544,11 +505,21 @@ wifi_error wifi_get_logger_supported_feature_set(wifi_interface_handle iface,
         unsigned int *support)
 {
     if (support) {
-        DebugCommand *cmd = new DebugCommand(iface, support, GET_FEATURE);
-        NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
-        wifi_error result = (wifi_error)cmd->start();
-        cmd->releaseRef();
-        return result;
+	if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+		if (check_wifi_chip_type() == RK912_WIFI) {
+			*support = 0;
+			return WIFI_SUCCESS;
+		}
+		wifi_error result = WIFI_SUCCESS;
+		*support = WIFI_LOGGER_MEMORY_DUMP_SUPPORTED;
+		return result;
+	} else {
+		DebugCommand *cmd = new DebugCommand(iface, support, GET_FEATURE);
+		NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
+		wifi_error result = (wifi_error)cmd->start();
+		cmd->releaseRef();
+		return result;
+	}
     } else {
         ALOGE("Get support buffer NULL");
         return  WIFI_ERROR_INVALID_ARGS;
@@ -558,6 +529,9 @@ wifi_error wifi_get_logger_supported_feature_set(wifi_interface_handle iface,
 wifi_error wifi_start_logging(wifi_interface_handle iface, u32 verbose_level,
         u32 flags, u32 max_interval_sec, u32 min_data_size, char *ring_name)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        return WIFI_SUCCESS;
+    }
     if (ring_name) {
         DebugCommand *cmd = new DebugCommand(iface, verbose_level, flags, max_interval_sec,
                     min_data_size, ring_name, START_RING_LOG);
@@ -584,38 +558,8 @@ public:
 
     int start() {
         ALOGV("Register loghandler");
-        int result;
-        uint32_t event_sock_pid = getpid() + (WIFI_HAL_EVENT_SOCK_PORT << 22);
         registerVendorHandler(GOOGLE_OUI, GOOGLE_DEBUG_RING_EVENT);
-
-        WifiRequest request(familyId(), ifaceId());
-
-        /* set hal event socket port to driver */
-        result = request.create(GOOGLE_OUI, LOGGER_SET_HAL_PID);
-        if (result != WIFI_SUCCESS) {
-            ALOGV("Failed to set Hal preInit; result = %d", result);
-            return result;
-        }
-        nlattr *data = request.attr_start(NL80211_ATTR_VENDOR_DATA);
-        result = request.put_u32(SET_HAL_START_ATTRIBUTE_EVENT_SOCK_PID, event_sock_pid);
-        if (result != WIFI_SUCCESS) {
-            ALOGV("Hal preInit Failed to put pic = %d", result);
-            return result;
-        }
-
-        if (result != WIFI_SUCCESS) {
-            ALOGV("Hal preInit Failed to put pid= %d", result);
-            return result;
-        } 
-
-        request.attr_end(data);
-
-        result = requestResponse(request);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Failed to register set Hal preInit; result = %d", result);
-            return result;
-        }
-        return result;
+        return WIFI_SUCCESS;
     }
 
     virtual int cancel() {
@@ -675,13 +619,8 @@ public:
 
             // ALOGI("Retrieved Debug data");
             if (mHandler.on_ring_buffer_data) {
-                /* Skip msg header. Retrieved log */
-                char *pBuff;
-                wifi_ring_buffer_entry *buffer_entry = 
-                            (wifi_ring_buffer_entry *) buffer;
-                pBuff = (char *) (buffer_entry + 1);
-                (*mHandler.on_ring_buffer_data)((char *)status.name, pBuff, 
-                    buffer_entry->entry_size, &status);
+                (*mHandler.on_ring_buffer_data)((char *)status.name, buffer, buffer_size,
+                        &status);
             }
         } else {
             ALOGE("Unknown Event");
@@ -798,7 +737,7 @@ public:
         wifi_ring_buffer_id ring_id;
         char *buffer = NULL;
         int buffer_size = 0;
-        bool is_err_alert = false;
+
 
         nlattr *vendor_data = event.get_attribute(NL80211_ATTR_VENDOR_DATA);
         int len = event.get_vendor_data_len();
@@ -817,37 +756,15 @@ public:
                 } else if (it.get_type() == LOGGER_ATTRIBUTE_RING_DATA) {
                     buffer_size = it.get_len();
                     buffer = (char *)it.get_data();
+            /*
                 } else if (it.get_type() == LOGGER_ATTRIBUTE_FW_ERR_CODE) {
-                    /* Error code is for error alert event only */
                     mErrCode = it.get_u32();
-                    is_err_alert = true;
+            */
                 } else {
                     ALOGW("Ignoring invalid attribute type = %d, size = %d",
                             it.get_type(), it.get_len());
                 }
             }
-
-            if(is_err_alert) {
-                mBuffSize = sizeof(mErrCode);
-                if (mBuff) free(mBuff);
-                mBuff = (char *)malloc(mBuffSize);
-                if (!mBuff) {
-                  ALOGE("Buffer allocation failed");
-                  return NL_SKIP;
-                }
-                memcpy(mBuff, (char *)&mErrCode, mBuffSize);
-                ALOGI("Initiating alert callback");
-                if (mHandler.on_alert) {
-                  (*mHandler.on_alert)(id(), mBuff, mBuffSize, mErrCode);
-                }
-                if (mBuff) {
-                  free(mBuff);
-                  mBuff = NULL;
-                }
-                mBuffSize = 0;
-                return NL_OK;
-            }
-
             if (mBuffSize) {
                 ALOGD("dump size: %d meta data size: %d", mBuffSize, buffer_size);
                 if (mBuff) free(mBuff);
@@ -895,147 +812,6 @@ public:
         return NL_OK;
     }
 };
-
-///////////////////////////////////////////////////////////////////////////////
-class HalInit : public WifiCommand
-{
-    int mErrCode;
-
-    public:
-    HalInit(wifi_interface_handle iface, int id)
-        : WifiCommand("HalInit", iface, id), mErrCode(0)
-    { }
-
-    int start() {
-        ALOGE("Start Set Hal");
-        WifiRequest request(familyId(), ifaceId());
-
-        int result = request.create(GOOGLE_OUI, LOGGER_SET_HAL_START);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Failed to set hal start; result = %d", result);
-            return result;
-        }
-
-        result = requestResponse(request);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Failed to register set hal start response; result = %d", result);
-        }
-        return result;
-    }
-
-
-    virtual int cancel() {
-        ALOGE("Cancel: Stop Hal");
-        WifiRequest request(familyId(), ifaceId());
-
-        int result = request.create(GOOGLE_OUI, LOGGER_HAL_STOP);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Failed to stop hal ; result = %d", result);
-            return result;
-        }
-
-        result = requestResponse(request);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Failed to register set hal start response; result = %d", result);
-        }
-        wifi_unregister_cmd(wifiHandle(), id());
-        return result;
-    }
-
-    int preInit() {
-        ALOGE("Hal preInit");
-        WifiRequest request(familyId(), ifaceId());
-
-        int result = request.create(GOOGLE_OUI, LOGGER_SET_HAL_START);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Failed to set Hal preInit; result = %d", result);
-            return result;
-        }
-
-        nlattr *data = request.attr_start(NL80211_ATTR_VENDOR_DATA);
-        result = request.put_string(SET_HAL_START_ATTRIBUTE_PRE_INIT, (char *)HAL_VERSION);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Hal preInit Failed to put data= %d", result);
-            return result;
-        }
-        request.attr_end(data);
-
-        result = requestResponse(request);
-        if (result != WIFI_SUCCESS) {
-            ALOGE("Failed to register set Hal preInit; result = %d", result);
-        }
-        return result;
-    }
-
-    virtual int handleResponse(WifiEvent& reply) {
-        ALOGE("In SetHalStarted::handleResponse");
-
-        if (reply.get_cmd() != NL80211_CMD_VENDOR) {
-            ALOGD("Ignoring reply with cmd = %d", reply.get_cmd());
-            return NL_SKIP;
-        }
-        return NL_OK;
-    }
-
-    virtual int handleEvent(WifiEvent& event) {
-        /* NO events! */
-        return NL_SKIP;
-    }
-};
-
-
-wifi_error wifi_start_hal(wifi_interface_handle iface)
-{
-    wifi_handle handle = getWifiHandle(iface);
-    ALOGV("HAL INIT start, handle = %p", handle);
-
-    HalInit *cmd = new HalInit(iface, HAL_START_REQUEST_ID);
-    NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
-    wifi_error result = wifi_register_cmd(handle, HAL_START_REQUEST_ID, cmd);
-    if (result != WIFI_SUCCESS) {
-        cmd->releaseRef();
-        return result;
-    }
-    result = (wifi_error)cmd->start();
-    if (result != WIFI_SUCCESS) {
-        wifi_unregister_cmd(handle,HAL_START_REQUEST_ID);
-        cmd->releaseRef();
-        return result;
-    }
-    return result;
-}
-
-wifi_error wifi_hal_preInit(wifi_interface_handle iface)
-{
-    wifi_handle handle = getWifiHandle(iface);
-    ALOGV("wifi_hal_preInit, handle = %p", handle);
-
-    HalInit *cmd = new HalInit(iface, HAL_START_REQUEST_ID);
-    NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
-    wifi_error result = wifi_register_cmd(handle, HAL_START_REQUEST_ID, cmd);
-    if (result != WIFI_SUCCESS) {
-        cmd->releaseRef();
-        return result;
-    }
-    result = (wifi_error)cmd->preInit();
-    if (result != WIFI_SUCCESS) {
-        wifi_unregister_cmd(handle,HAL_START_REQUEST_ID);
-        cmd->releaseRef();
-        return result;
-    }
-    return result;
-}
-
-wifi_error wifi_stop_hal(wifi_interface_handle iface)
-{
-    wifi_handle handle = getWifiHandle(iface);
-
-    HalInit *cmd = new HalInit(iface, HAL_START_REQUEST_ID);
-    NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
-    cmd->cancel();
-    cmd->releaseRef();
-    return WIFI_SUCCESS;
-}
 
 wifi_error wifi_set_alert_handler(wifi_request_id id, wifi_interface_handle iface,
         wifi_alert_handler handler)
@@ -1188,6 +964,11 @@ public:
 wifi_error wifi_get_firmware_memory_dump( wifi_interface_handle iface,
         wifi_firmware_memory_dump_handler handler)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        if (check_wifi_chip_type() == RK912_WIFI)
+            return WIFI_ERROR_NOT_SUPPORTED;
+        return WIFI_SUCCESS;
+    }
     MemoryDumpCommand *cmd = new MemoryDumpCommand(iface, handler);
     NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
     wifi_error result = (wifi_error)cmd->start();
@@ -1205,11 +986,7 @@ class PacketFateCommand: public WifiCommand
 public:
     PacketFateCommand(wifi_interface_handle handle)
         : WifiCommand("PacketFateCommand", handle, 0), mReqType(PACKET_MONITOR_START)
-    {
-        mReportBufs = NULL;
-        mNoReqFates = 0;
-        mNoProvidedFates = NULL;
-    }
+    { }
 
     PacketFateCommand(wifi_interface_handle handle, wifi_tx_report *tx_report_bufs,
             size_t n_requested_fates, size_t *n_provided_fates)
@@ -1362,21 +1139,20 @@ public:
 };
 
 class GetWakeReasonCountCommand : public WifiCommand {
-    WLAN_DRIVER_WAKE_REASON_CNT *mWakeReasonCnt;
+    WLAN_DRIVER_WAKE_REASON_CNT *mWlanDriverWakeReasonCnt;
     void *mCmdEventWakeCount;
-    public:
-    GetWakeReasonCountCommand(wifi_interface_handle handle,
-        WLAN_DRIVER_WAKE_REASON_CNT *wlanDriverWakeReasonCount) :
-        WifiCommand("GetWakeReasonCountCommand", handle, 0),
-        mWakeReasonCnt(wlanDriverWakeReasonCount)
+public:
+    GetWakeReasonCountCommand(wifi_interface_handle handle, WLAN_DRIVER_WAKE_REASON_CNT *wlanDriverWakeReasonCount)
+        : WifiCommand("GetWakeReasonCountCommand", handle, 0), mWlanDriverWakeReasonCnt(wlanDriverWakeReasonCount)
     {
-        mCmdEventWakeCount = mWakeReasonCnt->cmd_event_wake_cnt;
+        mCmdEventWakeCount = mWlanDriverWakeReasonCnt->cmd_event_wake_cnt;
     }
 
-    int createRequest(WifiRequest& request) {
+     int createRequest(WifiRequest& request) {
+        ALOGE("Start create wake stats command\n");
         int result = request.create(GOOGLE_OUI, LOGGER_GET_WAKE_REASON_STATS);
         if (result < 0) {
-            return result;
+           return result;
         }
 
         nlattr *data = request.attr_start(NL80211_ATTR_VENDOR_DATA);
@@ -1386,7 +1162,7 @@ class GetWakeReasonCountCommand : public WifiCommand {
     }
 
     int start() {
-        ALOGD("Start get wake stats command\n");
+        ALOGE("Start get wake stats command\n");
         WifiRequest request(familyId(), ifaceId());
 
         int result = createRequest(request);
@@ -1402,12 +1178,13 @@ class GetWakeReasonCountCommand : public WifiCommand {
         return result;
     }
 
-    protected:
-    int handleResponse(WifiEvent& reply) {
+protected:
+     int handleResponse(WifiEvent& reply) {
+
         ALOGE("In GetWakeReasonCountCommand::handleResponse");
 
         if (reply.get_cmd() != NL80211_CMD_VENDOR) {
-            ALOGD("Ignoring reply with cmd = %d", reply.get_cmd());
+            ALOGE("Ignoring reply with cmd = %d", reply.get_cmd());
             return NL_SKIP;
         }
 
@@ -1425,81 +1202,66 @@ class GetWakeReasonCountCommand : public WifiCommand {
 
         for (nl_iterator it(vendor_data); it.has_next(); it.next()) {
             switch (it.get_type()) {
-                case WAKE_STAT_ATTRIBUTE_TOTAL_DRIVER_FW:
-                    mWakeReasonCnt->total_driver_fw_local_wake =
-                        it.get_u32();
-                    break;
                 case WAKE_STAT_ATTRIBUTE_TOTAL_CMD_EVENT:
-                    mWakeReasonCnt->total_cmd_event_wake =
-                        it.get_u32();
+                mWlanDriverWakeReasonCnt->total_cmd_event_wake = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_CMD_COUNT_USED:
-                    mWakeReasonCnt->cmd_event_wake_cnt_used =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->cmd_event_wake_cnt_used = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_CMD_EVENT_WAKE:
                     memcpy(mCmdEventWakeCount, it.get_data(),
-                            (mWakeReasonCnt->cmd_event_wake_cnt_used * sizeof(int)));
+                        (mWlanDriverWakeReasonCnt->cmd_event_wake_cnt_used * sizeof(int)));
                     break;
                 case WAKE_STAT_ATTRIBUTE_TOTAL_RX_DATA_WAKE:
-                    mWakeReasonCnt->total_rx_data_wake =
-                        it.get_u32();
+                     mWlanDriverWakeReasonCnt->total_rx_data_wake = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_UNICAST_COUNT:
-                    mWakeReasonCnt->rx_wake_details.rx_unicast_cnt =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_wake_details.rx_unicast_cnt = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_MULTICAST_COUNT:
-                    mWakeReasonCnt->rx_wake_details.rx_multicast_cnt =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_wake_details.rx_multicast_cnt = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_BROADCAST_COUNT:
-                    mWakeReasonCnt->rx_wake_details.rx_broadcast_cnt =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_wake_details.rx_broadcast_cnt = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_ICMP_PKT:
-                    mWakeReasonCnt->rx_wake_pkt_classification_info.icmp_pkt =
-                        it.get_u32();
+                     mWlanDriverWakeReasonCnt->rx_wake_pkt_classification_info.icmp_pkt = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_ICMP6_PKT:
-                    mWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_pkt =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_pkt = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_ICMP6_RA:
-                    mWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_ra =
-                        it.get_u32();
+                     mWlanDriverWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_ra = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_ICMP6_NA:
-                    mWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_na =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_na = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_RX_ICMP6_NS:
-                    mWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_ns =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_wake_pkt_classification_info.icmp6_ns = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_IPV4_RX_MULTICAST_ADD_CNT:
-                    mWakeReasonCnt->rx_multicast_wake_pkt_info.ipv4_rx_multicast_addr_cnt =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_multicast_wake_pkt_info.ipv4_rx_multicast_addr_cnt = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_IPV6_RX_MULTICAST_ADD_CNT:
-                    mWakeReasonCnt->rx_multicast_wake_pkt_info.ipv6_rx_multicast_addr_cnt =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_multicast_wake_pkt_info.ipv6_rx_multicast_addr_cnt = it.get_u32();
                     break;
                 case WAKE_STAT_ATTRIBUTE_OTHER__RX_MULTICAST_ADD_CNT:
-                    mWakeReasonCnt->rx_multicast_wake_pkt_info.other_rx_multicast_addr_cnt =
-                        it.get_u32();
+                    mWlanDriverWakeReasonCnt->rx_multicast_wake_pkt_info.other_rx_multicast_addr_cnt = it.get_u32();
                     break;
                 default:
                     break;
             }
 
-        }
+         }
         return NL_OK;
     }
 };
 
 wifi_error wifi_start_pkt_fate_monitoring(wifi_interface_handle handle)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        return WIFI_SUCCESS;
+    }
     PacketFateCommand *cmd = new PacketFateCommand(handle);
     NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
     wifi_error result = (wifi_error)cmd->start();
@@ -1511,6 +1273,9 @@ wifi_error wifi_get_tx_pkt_fates(wifi_interface_handle handle,
         wifi_tx_report *tx_report_bufs, size_t n_requested_fates,
         size_t *n_provided_fates)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        return WIFI_SUCCESS;
+    }
     PacketFateCommand *cmd = new PacketFateCommand(handle, tx_report_bufs,
                 n_requested_fates, n_provided_fates);
     NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
@@ -1523,6 +1288,9 @@ wifi_error wifi_get_rx_pkt_fates(wifi_interface_handle handle,
         wifi_rx_report *rx_report_bufs, size_t n_requested_fates,
         size_t *n_provided_fates)
 {
+    if (check_wifi_chip_type() != BROADCOM_WIFI && check_wifi_chip_type() != REALTEK_WIFI) {
+        return WIFI_SUCCESS;
+    }
     PacketFateCommand *cmd = new PacketFateCommand(handle, rx_report_bufs,
                 n_requested_fates, n_provided_fates);
     NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
@@ -1534,8 +1302,12 @@ wifi_error wifi_get_rx_pkt_fates(wifi_interface_handle handle,
 wifi_error wifi_get_wake_reason_stats(wifi_interface_handle handle,
         WLAN_DRIVER_WAKE_REASON_CNT *wifi_wake_reason_cnt)
 {
-    GetWakeReasonCountCommand *cmd =
-        new GetWakeReasonCountCommand(handle, wifi_wake_reason_cnt);
+    if (check_wifi_chip_type() != BROADCOM_WIFI) {
+        return WIFI_SUCCESS;
+    }
+    GetWakeReasonCountCommand *cmd = new GetWakeReasonCountCommand(handle,
+                wifi_wake_reason_cnt);
+    NULL_CHECK_RETURN(cmd, "memory allocation failure", WIFI_ERROR_OUT_OF_MEMORY);
     wifi_error result = (wifi_error)cmd->start();
     cmd->releaseRef();
     return result;

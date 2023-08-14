@@ -56,8 +56,10 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
+import android.os.SystemProperties;
 import android.util.Log;
 import android.util.SparseArray;
+import android.text.TextUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -110,7 +112,8 @@ public class IpServer extends StateMachine {
 
     // TODO: have PanService use some visible version of this constant
     private static final String BLUETOOTH_IFACE_ADDR = "192.168.44.1/24";
-
+    // TODO: wifi hotspot static IP(Firefly)
+    private static final String WIFI_IFACE_ADDR = "192.168.43.1/24";
     // TODO: have this configurable
     private static final int DHCP_LEASE_TIME_SECS = 3600;
 
@@ -647,6 +650,16 @@ public class IpServer extends StateMachine {
 
         if (mInterfaceType == TetheringManager.TETHERING_BLUETOOTH) {
             return new LinkAddress(BLUETOOTH_IFACE_ADDR);
+        }
+        if (mInterfaceType == TetheringManager.TETHERING_WIFI) {
+            if("true".equals(SystemProperties.get("persist.net.use_wifi_iface_addr"))){
+                String wifiIfaceAddr = SystemProperties.get("persist.net.wifi_iface_addr",WIFI_IFACE_ADDR);
+                if(!TextUtils.isEmpty(wifiIfaceAddr)){
+                    return new LinkAddress(wifiIfaceAddr);
+                }
+                
+            }
+            
         }
 
         return mPrivateAddressCoordinator.requestDownstreamAddress(this);

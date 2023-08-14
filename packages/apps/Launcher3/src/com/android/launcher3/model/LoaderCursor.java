@@ -396,6 +396,16 @@ public class LoaderCursor extends CursorWrapper {
     protected boolean checkItemPlacement(ItemInfo item) {
         int containerIndex = item.screenId;
         if (item.container == LauncherSettings.Favorites.CONTAINER_HOTSEAT) {
+
+            // Return early if we detect that an item is under the hotseat button
+            if (!FeatureFlags.NO_ALL_APPS_ICON &&
+                    mIDP.isAllAppsButtonRank((int) item.screenId)) {
+                Log.e(TAG, "Error loading shortcut into hotseat " + item
+                        + " into position (" + item.screenId + ":" + item.cellX + ","
+                        + item.cellY + ") occupied by all apps");
+                return false;
+            }
+            
             final GridOccupancy hotseatOccupancy =
                     occupied.get(LauncherSettings.Favorites.CONTAINER_HOTSEAT);
 

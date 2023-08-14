@@ -46,6 +46,9 @@
 #include <queue>
 #include <thread>
 #include <vector>
+#include <filesystem>
+#include <iostream>
+#include <fstream>
 
 #include <InitProperties.sysprop.h>
 #include <android-base/chrono_utils.h>
@@ -147,6 +150,10 @@ bool CanReadProperty(const std::string& source_context, const std::string& name)
 
 static bool CheckMacPerms(const std::string& name, const char* target_context,
                           const char* source_context, const ucred& cr) {
+    if(strcmp("app.firefly.config",name.c_str())==0) {
+        return true;
+    }
+
     if (!target_context || !source_context) {
         return false;
     }
@@ -1058,6 +1065,121 @@ static void ProcessKernelCmdline() {
     }
 }
 
+static bool ReadDevicetreeNode(const std::string& path , std::string& value) {
+    std::fstream file ;
+    file.open(path, std::ios::in);
+    if(!file.is_open()) {
+        return false;
+    }
+
+    file >> value ;
+    file.close();
+    value.pop_back();
+    return true ;
+}
+
+static void FindPropFile(const std::filesystem::directory_iterator& dto_node,
+                         std::string& log ,std::vector<std::string>& filename) {
+    std::string filename_tmp ;
+    for(auto & iter:dto_node) {
+        if(iter.is_directory()) {
+            log += "[DTO PROP]{find a dir :" + std::string(iter.path()) + "}    ";
+            std::string dir_name = iter.path().filename();
+            std::string::size_type position = dir_name.find_last_of("-");
+            if(position == dir_name.npos)
+                continue ;
+
+            std::string suffix = dir_name.substr(position+1);
+            if(!suffix.compare("prop")) {
+                std::string prop_name_node = std::string(iter.path()) + "/propname" ;
+                std::string prop_name ;
+                if(!ReadDevicetreeNode(prop_name_node,prop_name)) {
+                    log += "[DTO PROP] node " + prop_name_node + " read fail}    ";
+                    continue ;
+                }
+
+                filename_tmp = "/vendor/dto_prop/" + prop_name ;
+                filename.push_back(filename_tmp);
+                log += "[DTO PROP]{add a prop file : " + filename_tmp + " }    ";
+            }
+        }
+    }
+}
+
+static void ProcessDtoProp() {
+    // If you print too many logs at once, you'll lose them, so this function prints one sentence with all the information in it
+    std::string log;
+
+    std::filesystem::path dto_node("/sys/firmware/devicetree/base/dto");
+    if(!std::filesystem::exists(dto_node)) {
+        log += "[DTO PROP]{No dto node found}    ";
+        LOG(INFO) << log ;
+        return;
+    }
+
+    std::string path = "/sys/firmware/devicetree/base/dto/status";
+    std::string value;
+    
+    if(ReadDevicetreeNode(path,value)) {
+        log += "[DTO PROP]{/sys/firmware/devicetree/base/dto/status :" + value + "}    ";
+    }
+    else{
+        log += "[DTO PROP]{/sys/firmware/devicetree/base/dto/status open fail}    ";
+        return;
+    }
+
+    if(!value.compare("okay")) {
+        log += "[DTO PROP]{The device tree is overlay , Start matching prop}    ";
+        std::filesystem::directory_iterator dto_node("/sys/firmware/devicetree/base/dto");
+        std::vector<std::string> filename;
+        FindPropFile(dto_node,log,filename);
+
+        std::map<std::string, std::string> properties;
+        for(auto & it:filename) {
+            //get .prop key and value
+            bool ret = load_properties_from_file(it.c_str(), nullptr, &properties);
+            if(ret) 
+                log += "[DTO PROP]{File " + it + " loaded successfully}   " ;
+            else 
+                log += "[DTO PROP]{File " + it + " loaded Failed}   "  ;
+
+        }
+
+        // set property
+        for (const auto& [name, value] : properties) {
+            size_t valuelen = value.size();
+            if (!IsLegalPropertyName(name)) {
+                log += "[DTO PROP]{Illegal property name : '" + name + "'}   ";
+                continue;
+            }
+
+            if (auto result = IsLegalPropertyValue(name, value); !result.ok()) {
+                log += "[DTO PROP]{" + result.error().message() + "}    ";
+                continue;
+            }
+
+            prop_info* pi = (prop_info*) __system_property_find(name.c_str());
+            if (pi != nullptr) {
+                __system_property_update(pi, value.c_str(), valuelen);
+            } else {
+                int rc = __system_property_add(name.c_str(), name.size(), value.c_str(), valuelen);
+                if (rc < 0) {
+                    log += "[DTO PROP]{__system_property_add failed: '" + name + "'}    ";
+                    continue;
+                }
+            }
+        }
+
+        log += "[DTO PROP]{ProcessDtoProp finish} ";
+        LOG(INFO) << log ;
+        return;
+    }
+
+    log += "[DTO PROP]{The device tree is not overlay}" ;
+    LOG(INFO) << log ;
+    return;
+}
+
 void PropertyInit() {
     selinux_callback cb;
     cb.func_audit = PropertyAuditCallback;
@@ -1082,6 +1204,9 @@ void PropertyInit() {
     ExportKernelBootProps();
 
     PropertyLoadBootDefaults();
+
+    // If there is a device tree overlay, the overlaid product model will be matched
+    ProcessDtoProp();
 }
 
 static void HandleInitSocket() {

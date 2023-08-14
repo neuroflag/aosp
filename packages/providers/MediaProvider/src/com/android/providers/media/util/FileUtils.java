@@ -49,6 +49,7 @@ import android.net.Uri;
 import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.os.storage.StorageManager;
+import android.os.storage.StorageVolume;
 import android.provider.MediaStore;
 import android.provider.MediaStore.MediaColumns;
 import android.system.ErrnoException;
@@ -56,6 +57,7 @@ import android.system.Os;
 import android.system.OsConstants;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+import android.util.ArraySet;
 import android.util.Log;
 import android.webkit.MimeTypeMap;
 
@@ -84,6 +86,7 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -386,18 +389,31 @@ public class FileUtils {
         }
     }
 
+    private static final int MAX_READ_STRING_SIZE = 4096;
+
     /**
      * Read given {@link File} as a single {@link String}. Returns
-     * {@link Optional#empty()} when the file doesn't exist.
+     * {@link Optional#empty()} when
+     * <ul>
+     * <li> the file doesn't exist or
+     * <li> the size of the file exceeds {@code MAX_READ_STRING_SIZE}
+     * </ul>
      */
     public static @NonNull Optional<String> readString(@NonNull File file) throws IOException {
         try {
-            final String value = new String(Files.readAllBytes(file.toPath()),
-                    StandardCharsets.UTF_8);
-            return Optional.of(value);
-        } catch (NoSuchFileException e) {
-            return Optional.empty();
+            if (file.length() <= MAX_READ_STRING_SIZE) {
+                final String value = new String(Files.readAllBytes(file.toPath()),
+                        StandardCharsets.UTF_8);
+                return Optional.of(value);
+            }
+            // When file size exceeds MAX_READ_STRING_SIZE, file is either
+            // corrupted or doesn't the contain expected data. Hence we return
+            // Optional.empty() which will be interpreted as empty file.
+            Logging.logPersistent(String.format("Ignored reading %s, file size exceeds %d", file,
+                    MAX_READ_STRING_SIZE));
+        } catch (NoSuchFileException ignored) {
         }
+        return Optional.empty();
     }
 
     /**
@@ -573,7 +589,7 @@ public class FileUtils {
                     int i = Integer.parseInt(dcfStrict.group(2));
                     @Override
                     public String next() {
-                        final String res = String.format("%s%04d", prefix, i);
+                        final String res = String.format(Locale.US, "%s%04d", prefix, i);
                         i++;
                         return res;
                     }
@@ -589,11 +605,14 @@ public class FileUtils {
                 // Generate names like "IMG_20190102_030405~2"
                 final String prefix = dcfRelaxed.group(1);
                 return new Iterator<String>() {
-                    int i = TextUtils.isEmpty(dcfRelaxed.group(2)) ? 1
+                    int i = TextUtils.isEmpty(dcfRelaxed.group(2))
+                            ? 1
                             : Integer.parseInt(dcfRelaxed.group(2));
                     @Override
                     public String next() {
-                        final String res = (i == 1) ? prefix : String.format("%s~%d", prefix, i);
+                        final String res = (i == 1)
+                            ? prefix
+                            : String.format(Locale.US, "%s~%d", prefix, i);
                         i++;
                         return res;
                     }
@@ -807,8 +826,15 @@ public class FileUtils {
         }
 
         final Uri uri = MediaStore.Files.getContentUri(volumeName);
-        final File path = context.getSystemService(StorageManager.class).getStorageVolume(uri)
-                .getDirectory();
+        File path = null;
+
+        try {
+            path = context.getSystemService(StorageManager.class).getStorageVolume(uri)
+                    .getDirectory();
+        } catch (IllegalStateException e) {
+            Log.w("Ignoring volume not found exception", e);
+        }
+
         if (path != null) {
             return path;
         } else {
@@ -831,10 +857,15 @@ public class FileUtils {
     /**
      * Return volume name which hosts the given path.
      */
-    public static @NonNull String getVolumeName(@NonNull Context context, @NonNull File path) {
+    public static @NonNull String getVolumeName(@NonNull Context context, @NonNull File path)
+            throws FileNotFoundException {
         if (contains(Environment.getStorageDirectory(), path)) {
-            return context.getSystemService(StorageManager.class).getStorageVolume(path)
-                    .getMediaStoreVolumeName();
+            StorageVolume volume = context.getSystemService(StorageManager.class)
+                    .getStorageVolume(path);
+            if (volume == null) {
+                throw new FileNotFoundException("Can't find volume for " + path.getPath());
+            }
+            return volume.getMediaStoreVolumeName();
         } else {
             return MediaStore.VOLUME_INTERNAL;
         }
@@ -1146,13 +1177,13 @@ public class FileUtils {
         if (!isForFuse && getAsBoolean(values, MediaColumns.IS_PENDING, false)) {
             final long dateExpires = getAsLong(values, MediaColumns.DATE_EXPIRES,
                     (System.currentTimeMillis() + DEFAULT_DURATION_PENDING) / 1000);
-            resolvedDisplayName = String.format(".%s-%d-%s",
-                    FileUtils.PREFIX_PENDING, dateExpires, displayName);
+            resolvedDisplayName = String.format(
+                    Locale.US, ".%s-%d-%s", FileUtils.PREFIX_PENDING, dateExpires, displayName);
         } else if (getAsBoolean(values, MediaColumns.IS_TRASHED, false)) {
             final long dateExpires = getAsLong(values, MediaColumns.DATE_EXPIRES,
                     (System.currentTimeMillis() + DEFAULT_DURATION_TRASHED) / 1000);
-            resolvedDisplayName = String.format(".%s-%d-%s",
-                    FileUtils.PREFIX_TRASHED, dateExpires, displayName);
+            resolvedDisplayName = String.format(
+                    Locale.US, ".%s-%d-%s", FileUtils.PREFIX_TRASHED, dateExpires, displayName);
         } else {
             resolvedDisplayName = displayName;
         }
@@ -1321,5 +1352,61 @@ public class FileUtils {
             }
         }
         return status;
+    }
+
+    /**
+     * @return {@code true} if {@code dir} is dirty and should be scanned, {@code false} otherwise.
+     */
+    public static boolean isDirectoryDirty(File dir) {
+        File nomedia = new File(dir, ".nomedia");
+        if (nomedia.exists()) {
+            try {
+                Optional<String> expectedPath = readString(nomedia);
+                // Returns true If .nomedia file is empty or content doesn't match |dir|
+                // Returns false otherwise
+                return !expectedPath.isPresent()
+                        || !expectedPath.get().equals(dir.getPath());
+            } catch (IOException e) {
+                Log.w(TAG, "Failed to read directory dirty" + dir);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * {@code isDirty} == {@code true} will force {@code dir} scanning even if it's hidden
+     * {@code isDirty} == {@code false} will skip {@code dir} scanning on next scan.
+     */
+    public static void setDirectoryDirty(File dir, boolean isDirty) {
+        File nomedia = new File(dir, ".nomedia");
+        if (nomedia.exists()) {
+            try {
+                writeString(nomedia, isDirty ? Optional.of("") : Optional.of(dir.getPath()));
+            } catch (IOException e) {
+                Log.w(TAG, "Failed to change directory dirty: " + dir + ". isDirty: " + isDirty);
+            }
+        }
+    }
+
+    /**
+     * @return the folder containing the top-most .nomedia in {@code file} hierarchy.
+     * E.g input as /sdcard/foo/bar/ will return /sdcard/foo
+     * even if foo and bar contain .nomedia files.
+     *
+     * Returns {@code null} if there's no .nomedia in hierarchy
+     */
+    public static File getTopLevelNoMedia(@NonNull File file) {
+        File topNoMedia = null;
+
+        File parent = file;
+        while (parent != null) {
+            File nomedia = new File(parent, ".nomedia");
+            if (nomedia.exists()) {
+                topNoMedia = nomedia;
+            }
+            parent = parent.getParentFile();
+        }
+
+        return topNoMedia;
     }
 }

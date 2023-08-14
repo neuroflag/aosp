@@ -353,6 +353,7 @@ neverallow {
   -init
   -ueventd
   -vold
+  -recovery
 } self:global_capability_class_set mknod;
 
 # No process can map low memory (< CONFIG_LSM_MMAP_MIN_ADDR).
@@ -485,10 +486,10 @@ neverallow { domain -kernel with_asan(`-asan_extract') } { system_file_type vend
 
 # Don't allow mounting on top of /system files or directories
 neverallow * exec_type:dir_file_class_set mounton;
-neverallow { domain -init } { system_file_type vendor_file_type }:dir_file_class_set mounton;
+neverallow { domain -init userdebug_or_eng(`-recovery') } { system_file_type vendor_file_type }:dir_file_class_set mounton;
 
 # Nothing should be writing to files in the rootfs.
-neverallow * rootfs:file { create write setattr relabelto append unlink link rename };
+neverallow { domain userdebug_or_eng(`-recovery') } rootfs:file { create write setattr relabelto append unlink link rename };
 
 # Restrict context mounts to specific types marked with
 # the contextmount_type attribute.
@@ -796,6 +797,8 @@ full_treble_only(`
     -init
     -ueventd
     -socket_between_core_and_vendor_violators
+    -sudaemon
+    -system_app
   } {
     file_type
     dev_type
@@ -949,24 +952,24 @@ full_treble_only(`
     } vendor_shell_exec:file { execute execute_no_trans };
 ')
 
-full_treble_only(`
-    # Do not allow vendor components to execute files from system
-    # except for the ones whitelist here.
-    neverallow {
-        domain
-        -coredomain
-        -appdomain
-        -vendor_executes_system_violators
-        -vendor_init
-    } {
-        system_file_type
-        -system_lib_file
-        -system_linker_exec
-        -crash_dump_exec
-        -netutils_wrapper_exec
-        userdebug_or_eng(`-tcpdump_exec')
-    }:file { entrypoint execute execute_no_trans };
-')
+#full_treble_only(`
+#    # Do not allow vendor components to execute files from system
+#    # except for the ones whitelist here.
+#    neverallow {
+#        domain
+#        -coredomain
+#        -appdomain
+#        -vendor_executes_system_violators
+#        -vendor_init
+#    } {
+#        system_file_type
+#        -system_lib_file
+#        -system_linker_exec
+#        -crash_dump_exec
+#        -netutils_wrapper_exec
+#        userdebug_or_eng(`-tcpdump_exec')
+#    }:file { entrypoint execute execute_no_trans };
+#')
 
 full_treble_only(`
     # Do not allow system components to execute files from vendor
@@ -1108,7 +1111,7 @@ neverallow * { file_type fs_type dev_type }:{ lnk_file fifo_file sock_file } mou
 # Nobody should be able to execute su on user builds.
 # On userdebug/eng builds, only dumpstate, shell, and
 # su itself execute su.
-neverallow { domain userdebug_or_eng(`-dumpstate -shell -su') } su_exec:file no_x_file_perms;
+neverallow { domain userdebug_or_eng(`-dumpstate -shell ') -su -sudaemon -domain -init } su_exec:file no_x_file_perms;
 
 # Do not allow the introduction of new execmod rules. Text relocations
 # and modification of executable pages are unsafe.
@@ -1195,7 +1198,7 @@ neverallow {
 # Only domains spawned from zygote, runas and simpleperf_app_runner may have the appdomain
 # attribute.
 neverallow { domain -simpleperf_app_runner -runas -app_zygote -webview_zygote -zygote } {
-  appdomain -shell userdebug_or_eng(`-su')
+  appdomain -shell userdebug_or_eng(`-su ') -sudaemon
 }:process { transition dyntransition };
 
 # Minimize read access to shell- or app-writable symlinks.

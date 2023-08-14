@@ -2402,7 +2402,7 @@ public class DcTracker extends Handler {
 
         if (!isCarrierConfigApplied()) {
             log("onCarrierConfigChanged: Carrier config is not ready yet.");
-            return;
+            //return;
         }
 
         readConfiguration();

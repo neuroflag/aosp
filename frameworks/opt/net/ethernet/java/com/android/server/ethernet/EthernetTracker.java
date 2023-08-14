@@ -35,9 +35,11 @@ import android.os.INetworkManagementService;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SystemProperties;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.provider.Settings;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.IndentingPrintWriter;
@@ -91,6 +93,8 @@ final class EthernetTracker {
     private final EthernetNetworkFactory mFactory;
     private final EthernetConfigStore mConfigStore;
 
+    private EthernetNetworkFactoryExt mEthernetNetworkFactoryExt;
+
     private final RemoteCallbackList<IEthernetServiceListener> mListeners =
             new RemoteCallbackList<>();
     private final TetheredInterfaceRequestList mTetheredInterfaceRequests =
@@ -133,6 +137,7 @@ final class EthernetTracker {
         NetworkCapabilities nc = createNetworkCapabilities(true /* clear default capabilities */);
         mFactory = new EthernetNetworkFactory(handler, context, nc);
         mFactory.register();
+        mEthernetNetworkFactoryExt = new EthernetNetworkFactoryExt();
     }
 
     void start() {
@@ -152,6 +157,7 @@ final class EthernetTracker {
         }
 
         mHandler.post(this::trackAvailableInterfaces);
+        mEthernetNetworkFactoryExt.start(mContext, mNMService);
     }
 
     void updateIpConfiguration(String iface, IpConfiguration ipConfiguration) {
@@ -162,7 +168,12 @@ final class EthernetTracker {
         mConfigStore.write(iface, ipConfiguration);
         mIpConfigurations.put(iface, ipConfiguration);
 
-        mHandler.post(() -> mFactory.updateIpConfiguration(iface, ipConfiguration));
+        String ext = SystemProperties.get("ro.net.eth_aux", "");
+        if (ext.equals(iface)) {
+            mHandler.post(() -> mEthernetNetworkFactoryExt.updateIpConfiguration(iface, ipConfiguration));
+        } else {
+            mHandler.post(() -> mFactory.updateIpConfiguration(iface, ipConfiguration));
+        }
     }
 
     IpConfiguration getIpConfiguration(String iface) {
@@ -170,7 +181,43 @@ final class EthernetTracker {
     }
 
     boolean isTrackingInterface(String iface) {
+        String ext = SystemProperties.get("ro.net.eth_aux", "");
+        if (ext.equals(iface)) {
+            return Settings.System.getInt(mContext.getContentResolver(),Settings.System.AUX_ETHERNET_ON,1) != 0;
+        }
         return mFactory.hasInterface(iface);
+    }
+
+    String getIpAddress(String iface) {
+        String ext = SystemProperties.get("ro.net.eth_aux", "");
+        if (ext.equals(iface)) {
+            return mEthernetNetworkFactoryExt.getIpAddress(iface);
+        }
+        return mFactory.getIpAddress(iface);
+    }
+
+    String getNetmask(String iface) {
+        String ext = SystemProperties.get("ro.net.eth_aux", "");
+        if (ext.equals(iface)) {
+            return mEthernetNetworkFactoryExt.getNetmask(iface);
+        }
+        return mFactory.getNetmask(iface);
+    }
+
+    String getGateway(String iface) {
+        String ext = SystemProperties.get("ro.net.eth_aux", "");
+        if (ext.equals(iface)) {
+            return mEthernetNetworkFactoryExt.getGateway();
+        }
+        return mFactory.getGateway(iface);
+    }
+
+    String getDns(String iface) {
+        String ext = SystemProperties.get("ro.net.eth_aux", "");
+        if (ext.equals(iface)) {
+            return mEthernetNetworkFactoryExt.getDns();
+        }
+        return mFactory.getDns(iface);
     }
 
     String[] getInterfaces(boolean includeRestricted) {
@@ -370,16 +417,55 @@ final class EthernetTracker {
         mTetheredInterfaceWasAvailable = available;
     }
 
-    private void maybeTrackInterface(String iface) {
+    public boolean isEthernetInterfaceActive(){
+        return Settings.System.getInt(mContext.getContentResolver(),Settings.System.ETHERNET_ON,1) != 0;
+    }
+
+    public void setInterfaceDown(String iface) {
+        Log.e(TAG, "setInterfaceDown iface:" + iface);
+        try {
+           if(!TextUtils.isEmpty(iface)) {
+               //updateInterfaceState(iface,false);
+               if (iface.matches(mIfaceMatch)){
+                    Settings.System.putInt(mContext.getContentResolver(),Settings.System.ETHERNET_ON,0);
+                    mHandler.post(() -> updateInterfaceState(iface, false));
+               } else {
+                    Settings.System.putInt(mContext.getContentResolver(),Settings.System.AUX_ETHERNET_ON,0);
+                    mEthernetNetworkFactoryExt.interfaceLinkStateChanged(iface, false);
+               }
+           }
+        }catch (Exception e) {
+            Log.e(TAG, "Error downing interface " + iface + ": " + e);
+        }
+    }
+   public void setInterfaceUp(String iface) {
+       Log.e(TAG, "setInterfaceUp iface:" + iface);
+       try {
+           if(!TextUtils.isEmpty(iface)) {
+              //updateInterfaceState(iface,true);
+              if (iface.matches(mIfaceMatch)) {
+                    Settings.System.putInt(mContext.getContentResolver(),Settings.System.ETHERNET_ON,1);
+                    mHandler.post(() -> updateInterfaceState(iface, true));
+              }else{
+                Settings.System.putInt(mContext.getContentResolver(),Settings.System.AUX_ETHERNET_ON,1);
+                mEthernetNetworkFactoryExt.interfaceLinkStateChanged(iface, true);
+              }
+            }
+        }catch (Exception e) {
+            Log.e(TAG, "Error uping interface " + iface + ": " + e);
+        }
+    }
+
+    private boolean maybeTrackInterface(String iface) {
         if (!iface.matches(mIfaceMatch)) {
-            return;
+            return false;
         }
 
         // If we don't already track this interface, and if this interface matches
         // our regex, start tracking it.
         if (mFactory.hasInterface(iface) || iface.equals(mDefaultInterface)) {
             if (DBG) Log.w(TAG, "Ignoring already-tracked interface " + iface);
-            return;
+            return false;
         }
         if (DBG) Log.i(TAG, "maybeTrackInterface: " + iface);
 
@@ -394,13 +480,32 @@ final class EthernetTracker {
         }
 
         addInterface(iface);
+        return true;
     }
 
     private void trackAvailableInterfaces() {
         try {
             final String[] ifaces = mNMService.listInterfaces();
             for (String iface : ifaces) {
-                maybeTrackInterface(iface);
+                //maybeTrackInterface(iface);
+               if (maybeTrackInterface(iface)) {
+                    String mIfaceTmp = iface;
+                    new Thread(new Runnable() {
+                        public void run() {
+                            // carrier is always 1 when kernel boot up no matter RJ45 plugin or not,
+                            // sleep a little time to wait kernel's correct carrier status
+                            try {
+                                Thread.sleep(3000);
+                            } catch (InterruptedException ignore) {
+                            }
+                            Log.d(TAG, mIfaceTmp + " isEthernetInterfaceActive = " + isEthernetInterfaceActive());
+                            if (!isEthernetInterfaceActive()) {
+                                updateInterfaceState(mIfaceTmp, false);
+                            }
+                        }
+                    }).start();
+                    break;
+                }
             }
         } catch (RemoteException | IllegalStateException e) {
             Log.e(TAG, "Could not get list of interfaces " + e);
@@ -415,17 +520,30 @@ final class EthernetTracker {
             if (DBG) {
                 Log.i(TAG, "interfaceLinkStateChanged, iface: " + iface + ", up: " + up);
             }
-            mHandler.post(() -> updateInterfaceState(iface, up));
+            if(isEthernetInterfaceActive())
+                mHandler.post(() -> updateInterfaceState(iface, up));
+
+            if(Settings.System.getInt(mContext.getContentResolver(),Settings.System.AUX_ETHERNET_ON,1) != 0){
+                mEthernetNetworkFactoryExt.interfaceLinkStateChanged(iface, up);
+            }
         }
 
         @Override
         public void interfaceAdded(String iface) {
+            if (DBG) {
+                Log.i(TAG, "interfaceAdded, iface: " + iface);
+            }
             mHandler.post(() -> maybeTrackInterface(iface));
+            mEthernetNetworkFactoryExt.interfaceAdded(iface);
         }
 
         @Override
         public void interfaceRemoved(String iface) {
+            if (DBG) {
+                Log.i(TAG, "interfaceRemoved, iface: " + iface);
+            }
             mHandler.post(() -> stopTrackingInterface(iface));
+            mEthernetNetworkFactoryExt.interfaceRemoved(iface);
         }
     }
 
@@ -617,9 +735,10 @@ final class EthernetTracker {
     private void updateIfaceMatchRegexp() {
         final String match = mContext.getResources().getString(
                 com.android.internal.R.string.config_ethernet_iface_regex);
-        mIfaceMatch = mIncludeTestInterfaces
-                ? "(" + match + "|" + TEST_IFACE_REGEXP + ")"
-                : match;
+        // mIfaceMatch = mIncludeTestInterfaces
+        //         ? "(" + match + "|" + TEST_IFACE_REGEXP + ")"
+        //         : match;
+        mIfaceMatch = SystemProperties.get("ro.net.eth_primary", "eth0");//"eth1";
         Log.d(TAG, "Interface match regexp set to '" + mIfaceMatch + "'");
     }
 

@@ -114,6 +114,8 @@ public final class ResourceCaptureToolsImpl implements ResourceCaptureTools {
         mHeadingSensor.deactivate();
         mSoundPlayer.unloadSound(R.raw.timer_increment);
         mSoundPlayer.unloadSound(R.raw.timer_final_second);
+        mSoundPlayer.release();
+        mMediaActionSound.release();
     }
 
     @Override

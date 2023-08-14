@@ -23,6 +23,7 @@ import android.animation.ObjectAnimator;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -37,6 +38,7 @@ import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.View.MeasureSpec;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
@@ -46,6 +48,7 @@ import com.android.camera.debug.Log;
 import com.android.camera.util.AndroidServices;
 import com.android.camera.util.CameraUtil;
 import com.android.camera.util.Gusterpolator;
+import com.android.camera.util.SystemProperties;
 import com.android.camera.stats.UsageStatistics;
 import com.android.camera.widget.AnimationEffects;
 import com.android.camera.widget.SettingsCling;
@@ -707,7 +710,8 @@ public class ModeListView extends FrameLayout
                 mSettingsButton.setLayerType(View.LAYER_TYPE_NONE, null);
             }
 
-            mSettingsButton.setVisibility(VISIBLE);
+            if (!mSecureCamera)
+                mSettingsButton.setVisibility(VISIBLE);
             // If successfully finish hiding shimmy, then we should go back to
             // fully hidden state.
             if (success) {
@@ -867,21 +871,42 @@ public class ModeListView extends FrameLayout
             int[] location = new int[2];
             // Gets icon's center position in relative to the window.
             selectedItem.getIconCenterLocationInWindow(location);
+            if (!CameraUtil.AUTO_ROTATE_SENSOR) {
+                if (CameraUtil.mScreenOrientation
+                        == ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE) {
+                    int tmp = location[0];
+                    location[0] = location[1];
+                    location[1] = mHeight - tmp + selectedItem.getMinVisibleWidth();
+                } else if (CameraUtil.mScreenOrientation
+                        == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT) {
+                    location[0] = mWidth - location[0] + selectedItem.getMinVisibleWidth();
+                    location[1] = mHeight - location[1] + selectedItem.getMinVisibleWidth();
+                } else if (CameraUtil.mScreenOrientation
+                        == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
+                    int tmp = location[0];
+                    location[0] = mWidth - location[1] + selectedItem.getMinVisibleWidth();
+                    location[1] = tmp;
+                }
+            }
             int iconX = location[0];
             int iconY = location[1];
             // Gets current view's top left position relative to the window.
             getLocationInWindow(location);
             // Calculate icon location relative to this view
+            if (!CameraUtil.AUTO_ROTATE_SENSOR) {
+                location[0] = 0;
+                location[1] = 0;
+            }
             iconX -= location[0];
             iconY -= location[1];
 
             effect.setAnimationStartingPosition(iconX, iconY);
             effect.setModeSpecificColor(selectedItem.getHighlightColor());
-            if (mScreenShotProvider != null) {
+            if (mScreenShotProvider != null && CameraUtil.AUTO_ROTATE_SENSOR) {
                 effect.setBackground(mScreenShotProvider
                         .getPreviewFrame(PREVIEW_DOWN_SAMPLE_FACTOR),
                         mCaptureLayoutHelper.getPreviewRect());
-                effect.setBackgroundOverlay(mScreenShotProvider.getPreviewOverlayAndControls());
+                effect.setBackgroundOverlay(mScreenShotProvider.getScreenShot(PREVIEW_DOWN_SAMPLE_FACTOR));
             }
             mCurrentAnimationEffects = effect;
             effect.startFadeoutAnimation(null, selectedItem, iconX, iconY, modeId);
@@ -1200,6 +1225,7 @@ public class ModeListView extends FrameLayout
         // Inflate the mode selector items and add them to a linear layout
         LayoutInflater inflater = AndroidServices.instance().provideLayoutInflater();
         mListView = (LinearLayout) findViewById(R.id.mode_list);
+        mListView.removeAllViews();
         for (int i = 0; i < mTotalModes; i++) {
             final ModeSelectorItem selectorItem =
                     (ModeSelectorItem) inflater.inflate(R.layout.mode_selector, null);
@@ -1245,6 +1271,14 @@ public class ModeListView extends FrameLayout
         resetModeSelectors();
     }
 
+    /**
+     *
+     * @return
+     */
+    public LinearLayout getListView(){
+        return mListView;
+    }
+    
     /**
      * Maps between the UI mode selector index to the actual mode id.
      *
@@ -1381,11 +1415,15 @@ public class ModeListView extends FrameLayout
         // Center mode drawer in the portion of camera preview that is not covered by
         // bottom bar.
         RectF uncoveredPreviewArea = mCaptureLayoutHelper.getUncoveredPreviewRect();
-        // Align left:
-        mListView.setTranslationX(uncoveredPreviewArea.left);
-        // Align center vertical:
-        mListView.setTranslationY(uncoveredPreviewArea.centerY()
-                - mListView.getMeasuredHeight() / 2);
+        if (CameraUtil.AUTO_ROTATE_SENSOR) {
+            // Align left:
+            mListView.setTranslationX(uncoveredPreviewArea.left);
+            // Align center vertical:
+            mListView.setTranslationY(uncoveredPreviewArea.centerY()
+                    - mListView.getMeasuredHeight() / 2);
+        } else {
+            updateUIByOrientation();
+        }
 
         updateSettingsButtonLayout(uncoveredPreviewArea);
     }
@@ -1396,12 +1434,36 @@ public class ModeListView extends FrameLayout
             mSettingsButton.setTranslationX(uncoveredPreviewArea.right - mSettingsButtonMargin
                     - mSettingsButton.getMeasuredWidth());
             mSettingsButton.setTranslationY(uncoveredPreviewArea.top + mSettingsButtonMargin);
+            if (!CameraUtil.AUTO_ROTATE_SENSOR) {
+                if (CameraUtil.mScreenOrientation
+                        == ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE) {
+                    mSettingsButton.setTranslationX(uncoveredPreviewArea.bottom - mSettingsButtonMargin
+                            - mSettingsButton.getMeasuredWidth());
+                    mSettingsButton.setTranslationY(mHeight - uncoveredPreviewArea.left - mSettingsButtonMargin
+                            - mSettingsButton.getMeasuredHeight());
+                } else if (CameraUtil.mScreenOrientation
+                        == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
+                    mSettingsButton.setTranslationX(mWidth - uncoveredPreviewArea.top - mSettingsButtonMargin
+                            - mSettingsButton.getMeasuredWidth());
+                    mSettingsButton.setTranslationY(uncoveredPreviewArea.right - mSettingsButtonMargin
+                            - mSettingsButton.getMeasuredHeight());
+                }
+            }
         } else {
             // Align to the bottom right.
             mSettingsButton.setTranslationX(uncoveredPreviewArea.right - mSettingsButtonMargin
                     - mSettingsButton.getMeasuredWidth());
             mSettingsButton.setTranslationY(uncoveredPreviewArea.bottom - mSettingsButtonMargin
                     - mSettingsButton.getMeasuredHeight());
+            if (!CameraUtil.AUTO_ROTATE_SENSOR) {
+                if (CameraUtil.mScreenOrientation
+                        == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT) {
+                    mSettingsButton.setTranslationX(mWidth - uncoveredPreviewArea.left - mSettingsButtonMargin
+                            - mSettingsButton.getMeasuredWidth());
+                    mSettingsButton.setTranslationY(mHeight - uncoveredPreviewArea.top - mSettingsButtonMargin
+                            - mSettingsButton.getMeasuredHeight());
+                }
+            }
         }
         if (mSettingsCling != null) {
             mSettingsCling.updatePosition(mSettingsButton);
@@ -1451,7 +1513,7 @@ public class ModeListView extends FrameLayout
      * and will not show even if this method is called to show it.
      */
     private void showSettingsClingIfEnabled(boolean show) {
-        if (mSettingsCling != null) {
+        if (mSettingsCling != null && !mSecureCamera) {
             int visibility = show ? VISIBLE : INVISIBLE;
             mSettingsCling.setVisibility(visibility);
         }
@@ -2208,6 +2270,47 @@ public class ModeListView extends FrameLayout
                 mPeepHoleAnimator.cancel();
                 return true;
             }
+        }
+    }
+
+    private boolean mSecureCamera;
+    public void setSecureCamera(boolean secure) {
+        mSecureCamera = secure;
+    }
+
+    private void updateUIByOrientation() {
+        if (mCaptureLayoutHelper == null) {
+            Log.e(TAG, "Capture layout helper needs to be set first.");
+            return;
+        }
+        // Center mode drawer in the portion of camera preview that is not covered by
+        // bottom bar.
+        RectF uncoveredPreviewArea = mCaptureLayoutHelper.getUncoveredPreviewRect();
+        if (CameraUtil.mScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+            // Align left:
+            mListView.setTranslationX(uncoveredPreviewArea.left);
+            // Align center vertical:
+            mListView.setTranslationY(uncoveredPreviewArea.centerY()
+                    - mListView.getMeasuredHeight() / 2);
+        } else if (CameraUtil.mScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT) {
+            // Align left:
+            mListView.setTranslationX(uncoveredPreviewArea.left);
+            // Align center vertical:
+            mListView.setTranslationY(uncoveredPreviewArea.centerY()
+                    - mListView.getMeasuredHeight() / 2);
+        } else if (CameraUtil.mScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE) {
+            // Align left:
+            mListView.setTranslationX(uncoveredPreviewArea.top);
+            // Align center vertical:
+            mListView.setTranslationY(uncoveredPreviewArea.centerX()
+                    - mListView.getMeasuredHeight() / 2);
+        } else if (CameraUtil.mScreenOrientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE) {
+            // Align left:
+            RectF bottomBarRecF = mCaptureLayoutHelper.getBottomBarRect();
+            mListView.setTranslationX(getMeasuredWidth() - bottomBarRecF.bottom);
+            // Align center vertical:
+            mListView.setTranslationY(uncoveredPreviewArea.centerX()
+                    - mListView.getMeasuredHeight() / 2);
         }
     }
 }

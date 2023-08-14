@@ -33,8 +33,8 @@ public class InterfaceConfiguration implements Parcelable {
     private HashSet<String> mFlags = new HashSet<>();
 
     // Must be kept in sync with constant in INetd.aidl
-    private static final String FLAG_UP = "up";
-    private static final String FLAG_DOWN = "down";
+    public static final String FLAG_UP = "up";
+    public static final String FLAG_DOWN = "down";
 
     private static final  String[] EMPTY_STRING_ARRAY = new String[0];
 

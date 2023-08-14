@@ -191,6 +191,13 @@
         android:key="fcc_equipment_id"
         android:order="52"
         android:title="@string/fcc_equipment_id"
+	android:summary="@string/summary_placeholder"/>
+
+    <!-- Device firefly version -->
+    <Preference
+	android:key="firefly_version"
+        android:order="43"
+        android:title="@string/firefly_version"
         android:summary="@string/summary_placeholder"/>
 
     <!-- Build number -->

@@ -18,6 +18,7 @@ package com.android.camera.one;
 
 import com.android.camera.async.Observable;
 import com.android.camera.async.Observables;
+import com.android.camera.debug.Log;
 import com.android.camera.device.CameraId;
 import com.android.camera.hardware.HardwareSpec;
 import com.android.camera.one.OneCamera.Facing;
@@ -35,9 +36,12 @@ import com.google.common.base.Function;
 public class OneCameraCaptureSetting {
     private final Size mCaptureSize;
     private final Observable<OneCamera.PhotoCaptureParameters.Flash> mFlashSetting;
+    private final Observable<OneCamera.PhotoCaptureParameters.WhiteBalance> mWhiteBalanceSetting;
     private final Observable<Integer> mExposureSetting;
     private final Observable<Boolean> mHdrSceneSetting;
     private final boolean mIsHdrPlusEnabled;
+    
+    private static final Log.Tag TAG = new Log.Tag("OneCameraCaptureSetting");
 
     public static OneCameraCaptureSetting create(
             Size pictureSize,
@@ -45,6 +49,7 @@ public class OneCameraCaptureSetting {
             final HardwareSpec hardwareSpec,
             String cameraSettingScope,
             boolean isHdrPlusEnabled) {
+        Log.d(TAG, "OneCameraCaptureSetting.create()");
         Observable<OneCamera.PhotoCaptureParameters.Flash> flashSetting;
         if (hardwareSpec.isFlashSupported()) {
             flashSetting = new FlashSetting(SettingObserver.ofString(
@@ -61,9 +66,12 @@ public class OneCameraCaptureSetting {
         } else {
             hdrSceneSetting = Observables.of(false);
         }
+        Observable<OneCamera.PhotoCaptureParameters.WhiteBalance> WbSetting = new WhiteBalanceSetting(
+                SettingObserver.ofString(settingsManager, cameraSettingScope, Keys.KEY_WHITEBALANCE));
         return new OneCameraCaptureSetting(
                 pictureSize,
                 flashSetting,
+                WbSetting,
                 exposureSetting,
                 hdrSceneSetting,
                 isHdrPlusEnabled);
@@ -72,11 +80,13 @@ public class OneCameraCaptureSetting {
     private OneCameraCaptureSetting(
             Size captureSize,
             Observable<OneCamera.PhotoCaptureParameters.Flash> flashSetting,
+            Observable<OneCamera.PhotoCaptureParameters.WhiteBalance> wbSetting,
             Observable<Integer> exposureSetting,
             Observable<Boolean> hdrSceneSetting,
             boolean isHdrPlusEnabled) {
         mCaptureSize = captureSize;
         mFlashSetting = flashSetting;
+        mWhiteBalanceSetting = wbSetting;
         mExposureSetting = exposureSetting;
         mHdrSceneSetting = hdrSceneSetting;
         mIsHdrPlusEnabled = isHdrPlusEnabled;
@@ -88,6 +98,10 @@ public class OneCameraCaptureSetting {
 
     public Observable<OneCamera.PhotoCaptureParameters.Flash> getFlashSetting() {
         return mFlashSetting;
+    }
+    
+    public Observable<OneCamera.PhotoCaptureParameters.WhiteBalance> getWhiteBalanceSetting() {
+        return mWhiteBalanceSetting;
     }
 
     public Observable<Integer> getExposureSetting() {

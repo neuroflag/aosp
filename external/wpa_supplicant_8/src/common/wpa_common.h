@@ -591,4 +591,7 @@ int wpa_use_cmac(int akmp);
 int wpa_use_aes_key_wrap(int akmp);
 int fils_domain_name_hash(const char *domain, u8 *hash);
 
+static char wifi_type[64] = {0};
+extern int check_wifi_chip_type_string(char *type);
+
 #endif /* WPA_COMMON_H */

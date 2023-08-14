@@ -126,6 +126,14 @@
         settings:controller="com.android.settings.accessibility.TopLevelAccessibilityPreferenceController"/>
 
     <Preference
+        android:key="top_level_screenshot"
+        android:title="@string/screenshot_manager"
+        android:summary="@string/screenshot_manager"
+        android:icon="@drawable/ic_homepage_screenshot"
+        android:order="-10"
+        android:fragment="com.android.settings.ScreenshotSettings"/>
+
+    <Preference
         android:key="top_level_system"
         android:title="@string/header_category_system"
         android:summary="@string/system_dashboard_summary"

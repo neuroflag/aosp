@@ -2392,6 +2392,30 @@ public class Intent implements Parcelable, Cloneable {
     @BroadcastBehavior(includeBackground = true)
     public static final String ACTION_BOOT_COMPLETED = "android.intent.action.BOOT_COMPLETED";
 
+    /****/
+    /**firefly_modify_songjf Broadcast Action:poweroff
+     * @hide
+     */
+    public static final String ACTION_SYSTEMUI_FIREFLY_POWEROFF = "action.SYSTEMUI_FIREFLY_POWEROFF";
+
+    /**
+     * firefly_modify_songjf Broadcast Action:Status bar  hidden
+     * @hide
+     */
+    public static final String ACTION_HIDE_BAR = "action.HIDE_STATUSBAR";
+
+    /**
+     * firefly_modify_songjf Broadcast Action:Status bar  show
+     * @hide
+     */
+    public static final String ACTION_SHOW_BAR = "action.SHOW_STATUSBAR";
+
+    /**
+     * firefly_modify_songjf Broadcast Action:Status bar  show
+     * @hide
+     */
+    public static final String ACTION_ALWAYS_HIDE_BAR_CHANGE = "action.ALWAYS_HIDE_STATUSBAR_CHENAGE";
+
     /**
      * Broadcast Action: This is broadcast when a user action should request a
      * temporary system dialog to dismiss.  Some examples of temporary system

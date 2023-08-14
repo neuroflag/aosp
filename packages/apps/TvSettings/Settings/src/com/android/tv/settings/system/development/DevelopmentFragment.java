@@ -19,13 +19,16 @@ package com.android.tv.settings.system.development;
 import android.Manifest;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.AlertDialog;
 import android.app.AppOpsManager;
+import android.app.ProgressDialog;
 import android.app.admin.DevicePolicyManager;
 import android.app.backup.IBackupManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
@@ -36,12 +39,16 @@ import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Message;
 import android.os.Parcel;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.StrictMode;
 import android.os.SystemProperties;
+import android.os.storage.StorageManager;
+import android.os.storage.VolumeInfo;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.service.persistentdata.PersistentDataBlockManager;
@@ -73,8 +80,11 @@ import com.android.tv.settings.SettingsPreferenceFragment;
 import com.android.tv.settings.system.development.audio.AudioDebug;
 import com.android.tv.settings.system.development.audio.AudioMetrics;
 import com.android.tv.settings.system.development.audio.AudioReaderException;
+import com.android.tv.settings.dialog.UsbModeSettings;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -89,6 +99,9 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
 
     private static final String ENABLE_DEVELOPER = "development_settings_enable";
     private static final String ENABLE_ADB = "enable_adb";
+    private static final String ENABLE_USB = "enable_usb";
+    private static final String ENABLE_INTERNET_ADB = "enable_internet_adb";
+    private static final String ENABLE_ABC = "enable_abc";
     private static final String CLEAR_ADB_KEYS = "clear_adb_keys";
     private static final String ENABLE_TERMINAL = "enable_terminal";
     private static final String KEEP_SCREEN_ON = "keep_screen_on";
@@ -163,7 +176,17 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
 
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
+    private static final String PERSIST_RK_ABC_SWITCH = "persist.abc_switch";
+    private static final String PERSIST_RK_ADB_ENABLE = "persist.sys.adb_enable";
+    private static final String PERSIST_RK_INTERNET_ADB = "persist.internet_adb_enable";
     private static String DEFAULT_LOG_RING_BUFFER_SIZE_IN_BYTES = "262144"; // 256K
+
+    //Go to Loader
+    private static final String KEY_GO_TO_LOADER = "go_to_loader";
+    private static final String KEY_SELECT_FLASH_IMG = "flash_img";
+    public static final String PERSIST_FLASH_IMG = "vendor.flash.success";
+    public static final String PERSIST_IF_PATH = "vendor.flash_if_path";
+    public static final String PERSIST_OF_PATH = "vendor.flash_of_path";
 
     private static final int[] MOCK_LOCATION_APP_OPS = new int[] {AppOpsManager.OP_MOCK_LOCATION};
 
@@ -183,6 +206,9 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
 
     private SwitchPreference mEnableDeveloper;
     private SwitchPreference mEnableAdb;
+    private SwitchPreference mEnableUsb;
+    private SwitchPreference mEnableInternetAdb;
+    private SwitchPreference mEnableAbc;
     private Preference mClearAdbKeys;
     private SwitchPreference mEnableTerminal;
     private Preference mBugreport;
@@ -258,6 +284,46 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
     private boolean mUnavailable;
 
     private AudioDebug mAudioDebug;
+    private UsbModeSettings mUsbModeSetting = null;
+
+    public static final int CHECKOUT_FLASH_IMG = 1;
+    public static final int LOADING_IMG = 2;
+    private Preference goToLoader;
+    private ListPreference mFlashImage;
+    private int flashCount = 0;
+    private ProgressDialog progressDialog;
+    private Handler mHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            switch (msg.what) {
+                case CHECKOUT_FLASH_IMG:
+                    flashCount++;
+                    String flash_img = SystemProperties.get(PERSIST_FLASH_IMG, "0");
+                    Log.i("ROCKCHIP", "flash_img = " + flash_img + ", count = " + flashCount);
+                    if (!TextUtils.isEmpty(flash_img) && flash_img.equals("1")){
+                        progressDialog.dismiss();
+                        Toast.makeText(getPreferenceScreen().getContext(), getResources().getString(R.string.flash_img_success), Toast.LENGTH_LONG).show();
+                        flashCount = 0;
+                        SystemProperties.set(PERSIST_FLASH_IMG, "0");
+                        break;
+                    }
+                    if (flashCount > 20) {
+                        progressDialog.dismiss();
+                        Toast.makeText(getPreferenceScreen().getContext(), getResources().getString(R.string.flash_img_failed), Toast.LENGTH_LONG).show();
+                        flashCount = 0;
+                        break;
+                    }
+                    mHandler.sendEmptyMessageDelayed(CHECKOUT_FLASH_IMG, 500);
+                    break;
+                case LOADING_IMG:
+                    String[] values = (String[]) msg.obj;
+                    mFlashImage.setEntries(values);
+                    mFlashImage.setEntryValues(values);
+                    break;
+            }
+        }
+    };
 
     public static DevelopmentFragment newInstance() {
         return new DevelopmentFragment();
@@ -289,6 +355,8 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
         mAudioDebug = new AudioDebug(getActivity(),
                 (boolean successful) -> onAudioRecorded(successful),
                 (AudioMetrics.Data data) -> updateAudioRecordingMetrics(data));
+        progressDialog = new ProgressDialog(getActivity());
+        progressDialog.setCancelable(false);
 
         super.onCreate(icicle);
     }
@@ -297,6 +365,7 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         mLogdSizeController = new LogdSizePreferenceController(getActivity());
         mLogpersistController = new LogpersistPreferenceController(getActivity(), getLifecycle());
+        mUsbModeSetting = new UsbModeSettings(getPreferenceManager().getContext());
 
         if (!mUm.isAdminUser()
                 || mUm.hasUserRestriction(UserManager.DISALLOW_DEBUGGING_FEATURES)
@@ -318,6 +387,23 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
         final PreferenceGroup debugDebuggingCategory = (PreferenceGroup)
                 findPreference(DEBUG_DEBUGGING_CATEGORY_KEY);
         mEnableAdb = findAndInitSwitchPref(ENABLE_ADB);
+        mEnableUsb = findAndInitSwitchPref(ENABLE_USB);
+        mEnableInternetAdb = findAndInitSwitchPref(ENABLE_INTERNET_ADB);
+        mEnableAbc = findAndInitSwitchPref(ENABLE_ABC);
+
+        mEnableUsb.setChecked(mUsbModeSetting.getDefaultValue());
+        if (mEnableUsb.isChecked()){
+            mEnableUsb.setSummary(R.string.usb_connect_to_computer);
+        } else {
+            mEnableUsb.setSummary(R.string.usb_disconnect_to_computer);
+        }
+        String internetADB = SystemProperties.get(PERSIST_RK_INTERNET_ADB, "0");
+        if (internetADB.equals("1")) {
+            mEnableInternetAdb.setChecked(true);
+        } else {
+            mEnableInternetAdb.setChecked(false);
+        }
+
         mClearAdbKeys = findPreference(CLEAR_ADB_KEYS);
         if (!AdbProperties.secure().orElse(false)) {
             if (debugDebuggingCategory != null) {
@@ -357,6 +443,9 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
 
         if (!mUm.isAdminUser()) {
             disableForUser(mEnableAdb);
+            disableForUser(mEnableUsb);
+            disableForUser(mEnableInternetAdb);
+            disableForUser(mEnableAbc);
             disableForUser(mClearAdbKeys);
             disableForUser(mEnableTerminal);
             disableForUser(mPassword);
@@ -462,6 +551,31 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
             removePreference(KEY_COLOR_MODE);
             mColorModePreference = null;
         }
+
+        String value = SystemProperties.get("ro.flash_img.enable", "false");
+
+        goToLoader = (Preference) findPreference(KEY_GO_TO_LOADER);
+        mFlashImage = (ListPreference) findPreference(KEY_SELECT_FLASH_IMG);
+        if (value != null && value.equals("true")) {
+            mFlashImage.setOnPreferenceChangeListener(this);
+            mFlashImage.setEntries(new String[]{});
+            mFlashImage.setEntryValues(new String[]{});
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    String[] values = getImgPath();
+                    Message message = mHandler.obtainMessage();
+                    message.what = LOADING_IMG;
+                    message.obj = values;
+                    mHandler.sendMessage(message);
+                }
+            }).start();
+        } else {
+            Log.i("ROCKCHIP", "remove ListPreference");
+            debugDebuggingCategory.removePreference(mFlashImage);
+            mFlashImage = null;
+        }
+
     }
 
     private void removePreference(String key) {
@@ -611,6 +725,7 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
     public void onDestroy() {
         super.onDestroy();
         dismissDialogs();
+        mHandler.removeCallbacksAndMessages(null);
     }
 
     void updateSwitchPreference(SwitchPreference switchPreference, boolean value) {
@@ -640,6 +755,7 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
         updateSwitchPreference(mForceAllowOnExternal, Settings.Global.getInt(cr,
                 Settings.Global.FORCE_ALLOW_ON_EXTERNAL, 0) != 0);
         updateBluetoothHciSnoopLogValues();
+        updateSwitchPreference(mEnableAbc, (SystemProperties.getInt(PERSIST_RK_ABC_SWITCH, 0)) != 0);
         updateHdcpValues();
         updatePasswordSummary();
         updateDebuggerOptions();
@@ -1569,6 +1685,38 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
                 mVerifyAppsOverUsb.setEnabled(false);
                 mVerifyAppsOverUsb.setChecked(false);
             }
+        } else if (preference == mEnableUsb) {
+            if (mEnableUsb.isChecked()){
+                mUsbModeSetting.onUsbModeClick(UsbModeSettings.SLAVE_MODE);
+                mEnableUsb.setSummary(R.string.usb_connect_to_computer);
+            } else {
+                mUsbModeSetting.onUsbModeClick(UsbModeSettings.HOST_MODE);
+                mEnableUsb.setSummary(R.string.usb_disconnect_to_computer);
+            }
+        } else if (preference == mEnableInternetAdb) {
+            if (mEnableInternetAdb.isChecked()) {
+                SystemProperties.set(PERSIST_RK_INTERNET_ADB, "1");
+            } else {
+                SystemProperties.set(PERSIST_RK_INTERNET_ADB, "0");
+            }
+        } else if (preference == mEnableAbc) {
+            if (SystemProperties.getInt(PERSIST_RK_ABC_SWITCH, 0) == 1) {
+                Log.d(TAG, "set modify abc property to persist 0");
+                SystemProperties.set(PERSIST_RK_ABC_SWITCH, "0");
+            } else {
+                Log.d(TAG, "set modify abc property to persist 1");
+                SystemProperties.set(PERSIST_RK_ABC_SWITCH, "1");
+                File dirLogs = new File("data/vendor/logs");
+                Log.i("ROCKCHIP", "file exists = " + dirLogs.exists());
+                if (dirLogs.exists()) {
+                    long dirSize = getDirSize(dirLogs);
+                    dirSize = dirSize / 1024 / 1024;
+                    Log.i("ROCKCHIP", "dirLogs is exists size = " + dirSize);
+                    String tipHead = getResources().getString(R.string.abc_tip_head);
+                    String tipEnd = getResources().getString(R.string.abc_tip_end);
+                    Toast.makeText(getActivity(), tipHead + dirSize + tipEnd, Toast.LENGTH_LONG).show();
+                }
+            }
         } else if (preference == mEnableTerminal) {
             final PackageManager pm = getActivity().getPackageManager();
             pm.setApplicationEnabledSetting(TERMINAL_APP_PACKAGE,
@@ -1696,6 +1844,8 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
             return true;
         } else if (preference == mBtHciSnoopLog) {
             writeBtHciSnoopLogOptions(newValue);
+        } else if (preference == mFlashImage) {
+            flashImageToDevice((String) newValue);
             return true;
         }
         return false;
@@ -1775,5 +1925,107 @@ public class DevelopmentFragment extends SettingsPreferenceFragment
         } catch (SecurityException e) {
             Log.e(TAG, "Fail to set oem unlock.", e);
         }
+    }
+
+    private void goToLoader() {
+        try{
+            java.lang.Runtime.getRuntime().exec("reboot loader");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private long getDirSize(File dirOrFile) {
+        long dirSize = 0;
+        if (dirOrFile.exists()) {
+            if (dirOrFile.isDirectory()) {
+                File[] files = dirOrFile.listFiles();
+                for (File file : files) {
+                    dirSize += getDirSize(file);
+                }
+            } else {
+                dirSize += dirOrFile.length();
+            }
+        }
+        return dirSize;
+    }
+
+    private List<File> getImgPathList(String path) {
+        List fileList = new ArrayList();
+        File root = new File(path);
+        if (root.exists()) {
+            File[] files = root.listFiles();
+            if (files != null && files.length > 0) {
+                for (File file : files) {
+                Log.i("ROCKCHIP", "file = " + file.getAbsolutePath());
+                    if (file.isFile() && file.getName().endsWith("img")) {
+                        fileList.add(file);
+                        Log.i("ROCKCHIP", "file path = " + file.getAbsolutePath());
+                    } else if (file.isDirectory()) {
+                        fileList.addAll(getImgPathList(file.getAbsolutePath()));
+                    } else {
+                        continue;
+                    }
+                }
+            }
+        }
+        return fileList;
+    }
+
+    private String[] getImgPath() {
+        List<File> fileList = getImgPathList("/mnt/");
+        StorageManager storageManager = (StorageManager) getActivity().getSystemService(Context.STORAGE_SERVICE);
+        List<VolumeInfo> volumeInfos = storageManager.getVolumes();
+        for (VolumeInfo volumeInfo : volumeInfos) {
+            List<File> volumelist = getImgPathList(volumeInfo.getPath().getAbsolutePath());
+            fileList.addAll(volumelist);
+        }
+        String[] paths = new String[fileList.size()];
+        Log.i("ROCKCHIP", "fileList = " + fileList.toString());
+        for (int index = 0; index < fileList.size(); index++) {
+            File file = fileList.get(index);
+            if (file != null && file.getName().endsWith("img")) {
+                Log.i("ROCKCHIP", "path[" + index + "] = " + file.getAbsolutePath());
+                paths[index] = file.getAbsolutePath();
+            }
+        }
+        return paths;
+    }
+
+    private void flashImageToDevice(String path) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(getPreferenceScreen().getContext());
+        builder.setTitle(getResources().getString(R.string.select_img_to_flash));
+        final String items[] = new File("/dev/block/by-name").list();
+        builder.setSingleChoiceItems(items, -1, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                SystemProperties.set(PERSIST_OF_PATH, "/dev/block/by-name/" + items[which]);
+            }
+        }).setPositiveButton(getActivity().getResources().getString(R.string.ok), new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                SystemProperties.set(PERSIST_IF_PATH, path);
+                SystemProperties.set(PERSIST_FLASH_IMG, "2");
+                progressDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+                progressDialog.setMessage(getActivity().getResources().getString(R.string.flash_img_progress));
+                progressDialog.show();
+                mHandler.sendEmptyMessageDelayed(CHECKOUT_FLASH_IMG, 500);
+            }
+        }).setNegativeButton(getActivity().getResources().getString(R.string.no_button), new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                SystemProperties.set(PERSIST_IF_PATH, "");
+                SystemProperties.set(PERSIST_OF_PATH, "");
+                SystemProperties.set(PERSIST_FLASH_IMG, "0");
+            }
+        }).setOnCancelListener(new DialogInterface.OnCancelListener() {
+            @Override
+            public void onCancel(DialogInterface dialog) {
+                SystemProperties.set(PERSIST_IF_PATH, "");
+                SystemProperties.set(PERSIST_OF_PATH, "");
+                SystemProperties.set(PERSIST_FLASH_IMG, "0");
+            }
+        });
+        builder.show();
     }
 }

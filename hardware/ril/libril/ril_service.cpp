@@ -3670,7 +3670,10 @@ int convertResponseStringEntryToInt(char **response, int index, int numStrings) 
 int convertResponseHexStringEntryToInt(char **response, int index, int numStrings) {
     const int hexBase = 16;
     if ((response != NULL) &&  (numStrings > index) && (response[index] != NULL)) {
-        return strtol(response[index], NULL, hexBase);
+        //return strtol(response[index], NULL, hexBase);
+
+        //firefly modify to support Telecom SIM card
+        return (0x7fffffff & strtol(response[index], NULL, hexBase));
     }
 
     return -1;

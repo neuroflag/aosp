@@ -43,6 +43,56 @@ public class EthernetManager {
     private static final String TAG = "EthernetManager";
     private static final int MSG_AVAILABILITY_CHANGED = 1000;
 
+    /**
+     * @hide
+     */
+    public static final String ETHERNET_IFACE_STATE_CHANGED_ACTION = "android.net.ethernet.ETHERNET_IFACE_STATE_CHANGED";
+    
+    /**
+     * @hide
+     */
+    public static final String EXTRA_ETHERNET_IFACE_STATE = "ethernet_iface_state";
+    
+    /**
+     * @hide
+     */
+    public static final int ETHER_IFACE_STATE_DOWN = 0;
+    /**
+     * @hide
+     */
+    public static final int ETHER_IFACE_STATE_UP = 1;
+
+    /**
+     * @hide
+     */
+    public static final String ETHERNET_STATE_CHANGED_ACTION = "android.net.ethernet.ETHERNET_STATE_CHANGED";
+
+    /**
+     * @hide
+     */
+    public static final String EXTRA_ETHERNET_STATE = "ethernet_state";
+
+    /**
+     * @hide
+     */
+    public static final String EXTRA_ETHERNET_IFACE = "ethernet_iface";
+
+    /**
+     * @hide
+     */
+    public static final int ETHER_STATE_DISCONNECTED = 0;
+
+    /**
+     * @hide
+     */
+    public static final int ETHER_STATE_CONNECTING = 1;
+
+    /**
+     * @hide
+     */
+    public static final int ETHER_STATE_CONNECTED = 2;  
+
+
     private final Context mContext;
     private final IEthernetManager mService;
     private final Handler mHandler = new Handler(ConnectivityThread.getInstanceLooper()) {
@@ -93,6 +143,43 @@ public class EthernetManager {
         mService = service;
     }
 
+   /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public  void setEthernetEnabled(String iface,boolean enable){
+        try {
+            mService.setEthernetEnabled(iface, enable);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+   /**
+     * @hide
+     */ 
+    @UnsupportedAppUsage
+    public boolean isEthernetInterfaceActive() {
+        try {
+            return mService.isEthernetInterfaceActive();
+        } catch (RemoteException e) {
+        }
+        return false;
+    }
+
+   /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public int getEthernetConnectState() {
+        /*try {
+            return mService.getEthernetConnectState();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }*/
+        return 0;
+    }
+
     /**
      * Get Ethernet configuration.
      * @return the Ethernet Configuration, contained in {@link IpConfiguration}.
@@ -139,6 +226,54 @@ public class EthernetManager {
     public boolean isAvailable(String iface) {
         try {
             return mService.isAvailable(iface);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public String getIpAddress(String iface) {
+        try {
+            return mService.getIpAddress(iface);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public String getNetmask(String iface) {
+        try {
+            return mService.getNetmask(iface);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public String getGateway(String iface) {
+        try {
+            return mService.getGateway(iface);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    @UnsupportedAppUsage
+    public String getDns(String iface) {
+        try {
+            return mService.getDns(iface);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

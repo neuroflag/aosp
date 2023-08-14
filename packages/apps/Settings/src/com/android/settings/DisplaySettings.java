@@ -23,6 +23,7 @@ import android.os.Bundle;
 import com.android.settings.dashboard.DashboardFragment;
 import com.android.settings.display.BrightnessLevelPreferenceController;
 import com.android.settings.display.CameraGesturePreferenceController;
+import com.android.settings.display.HdmiSettingsPreferenceController;
 import com.android.settings.display.LiftToWakePreferenceController;
 import com.android.settings.display.NightDisplayPreferenceController;
 import com.android.settings.display.NightModePreferenceController;
@@ -36,6 +37,8 @@ import com.android.settings.search.BaseSearchIndexProvider;
 import com.android.settingslib.core.AbstractPreferenceController;
 import com.android.settingslib.core.lifecycle.Lifecycle;
 import com.android.settingslib.search.SearchIndexable;
+import com.android.settings.display.RotationPreferenceController;
+import com.android.settings.display.ShowHideStatusbarPreferenceController;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +48,7 @@ public class DisplaySettings extends DashboardFragment {
     private static final String TAG = "DisplaySettings";
 
     private static final String KEY_SCREEN_TIMEOUT = "screen_timeout";
+    private static final String KET_HDMI_SETTINGS = "hdmi_settings";
 
     @Override
     public int getMetricsCategory() {
@@ -90,6 +94,9 @@ public class DisplaySettings extends DashboardFragment {
         controllers.add(new ShowOperatorNamePreferenceController(context));
         controllers.add(new ThemePreferenceController(context));
         controllers.add(new BrightnessLevelPreferenceController(context, lifecycle));
+        controllers.add(new HdmiSettingsPreferenceController(context, KET_HDMI_SETTINGS));
+        controllers.add(new RotationPreferenceController(context));
+	controllers.add(new ShowHideStatusbarPreferenceController(context));
         return controllers;
     }
 

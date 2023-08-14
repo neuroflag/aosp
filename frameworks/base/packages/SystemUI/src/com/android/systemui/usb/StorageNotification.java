@@ -811,6 +811,7 @@ public class StorageNotification extends SystemUI {
 
     private boolean isTv() {
         PackageManager packageManager = mContext.getPackageManager();
-        return packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+        return packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+            || packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION);
     }
 }

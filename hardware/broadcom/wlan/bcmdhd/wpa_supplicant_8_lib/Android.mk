@@ -66,7 +66,7 @@ L_CFLAGS += -Wall -Werror -Wno-unused-parameter -Wno-macro-redefined
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := lib_driver_cmd_bcmdhd
-LOCAL_SHARED_LIBRARIES := libc libcutils
+LOCAL_SHARED_LIBRARIES := libc libcutils librkwifi-ctrl
 LOCAL_CFLAGS := $(L_CFLAGS)
 LOCAL_SRC_FILES := $(WPA_SRC_FILE)
 LOCAL_C_INCLUDES := $(WPA_SUPPL_DIR_INCLUDE)

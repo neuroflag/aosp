@@ -125,6 +125,7 @@ public final class ResourceConstructedImpl implements ResourceConstructed {
 
     @Override
     public void close() {
+        mSoundPlayer.release();
         mCameraThread.quit();
     }
 

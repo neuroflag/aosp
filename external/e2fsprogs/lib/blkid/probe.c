@@ -37,6 +37,13 @@
 #include "uuid/uuid.h"
 #include "probe.h"
 
+
+#ifdef USING_ICONV
+#include "iconv.h"
+int utf16toUtf8(char *inbuf, size_t len,char *outbuf);
+int gbk2utf8(char *inbuf, size_t inlen, char *outbuf);
+#endif
+
 static int figure_label_len(const unsigned char *label, int len)
 {
 	const unsigned char *end = label + len - 1;
@@ -507,6 +514,22 @@ static unsigned char *search_fat_label(struct vfat_dir_entry *dir, int count)
 	return 0;
 }
 
+#ifdef USING_ICONV
+int gbk2utf8(char *inbuf, size_t inlen, char *outbuf)
+{
+    char **pin = &inbuf;
+    char **pout = &outbuf;
+    size_t dlen= 32 * 4;
+    iconv_t cd = iconv_open("UTF-8","GB2312");
+    if (cd==NULL){
+        return -1;
+    }
+    iconv(cd, pin, &inlen, pout, &dlen);
+    iconv_close(cd);
+    return 0;
+}
+#endif
+
 /* FAT label extraction from the root directory taken from Kay
  * Sievers's volume_id library */
 static int probe_fat(struct blkid_probe *probe,
@@ -618,8 +641,15 @@ static int probe_fat(struct blkid_probe *probe,
 	}
 
 	if (vol_label && memcmp(vol_label, no_name, 11)) {
-		if ((label_len = figure_label_len(vol_label, 11)))
+		if ((label_len = figure_label_len(vol_label, 11))) {
+#ifdef USING_ICONV
+            char tmp[129];
+            memcpy(tmp, vol_label, label_len);
+            gbk2utf8(tmp, label_len, (char *)vol_label);
+            label_len = strlen(vol_label);
+#endif
 			label = vol_label;
+		}
 	}
 
 	/* We can't just print them as %04X, because they are unaligned */
@@ -679,6 +709,68 @@ static int probe_fat_nomagic(struct blkid_probe *probe,
 	return probe_fat(probe, id, buf);
 }
 
+static void unicode_16be_to_utf8(unsigned char *str, int out_len,
+    const unsigned char *buf, int in_len)
+{
+    int i, j;
+    unsigned int c;
+
+    for (i = j = 0; i + 2 <= in_len; i += 2) {
+        c = (buf[i] << 8) | buf[i+1];
+        if (c == 0) {
+            str[j] = '\0';
+            break;
+        } else if (c < 0x80) {
+            if (j+1 >= out_len)
+                break;
+            str[j++] = (unsigned char) c;
+        } else if (c < 0x800) {
+            if (j+2 >= out_len)
+                break;
+            str[j++] = (unsigned char) (0xc0 | (c >> 6));
+            str[j++] = (unsigned char) (0x80 | (c & 0x3f));
+        } else {
+            if (j+3 >= out_len)
+                break;
+            str[j++] = (unsigned char) (0xe0 | (c >> 12));
+            str[j++] = (unsigned char) (0x80 | ((c >> 6) & 0x3f));
+            str[j++] = (unsigned char) (0x80 | (c & 0x3f));
+        }
+    }
+    str[j] = '\0';
+}
+
+static void unicode_16le_to_utf8(unsigned char *str, int out_len,
+    const unsigned char *buf, int in_len)
+{
+    int i, j;
+    unsigned int c;
+
+    for (i = j = 0; i + 2 <= in_len; i += 2) {
+        c = (buf[i+1] << 8) | buf[i];
+        if (c == 0) {
+            str[j] = '\0';
+            break;
+        } else if (c < 0x80) {
+            if (j+1 >= out_len)
+                break;
+            str[j++] = (unsigned char) c;
+        } else if (c < 0x800) {
+            if (j+2 >= out_len)
+                break;
+            str[j++] = (unsigned char) (0xc0 | (c >> 6));
+            str[j++] = (unsigned char) (0x80 | (c & 0x3f));
+        } else {
+            if (j+3 >= out_len)
+                break;
+            str[j++] = (unsigned char) (0xe0 | (c >> 12));
+            str[j++] = (unsigned char) (0x80 | ((c >> 6) & 0x3f));
+            str[j++] = (unsigned char) (0x80 | (c & 0x3f));
+        }
+    }
+    str[j] = '\0';
+}
+
 static int probe_ntfs(struct blkid_probe *probe,
 		      struct blkid_magic *id __BLKID_ATTR((unused)),
 		      unsigned char *buf)
@@ -686,7 +778,7 @@ static int probe_ntfs(struct blkid_probe *probe,
 	struct ntfs_super_block *ns;
 	struct master_file_table_record *mft;
 	struct file_attribute *attr;
-	char		uuid_str[17], label_str[129], *cp;
+	char		uuid_str[17], label_str[129]/*, *cp*/;
 	int		bytes_per_sector, sectors_per_cluster;
 	int		mft_record_size, attr_off, attr_len;
 	unsigned int	i, attr_type, val_len;
@@ -769,13 +861,10 @@ static int probe_ntfs(struct blkid_probe *probe,
 			if (val_len > sizeof(label_str))
 				val_len = sizeof(label_str)-1;
 
-			for (i=0, cp=label_str; i < val_len; i+=2,cp++) {
-				val = ((__u8 *) attr) + val_off + i;
-				*cp = val[0];
-				if (val[1])
-					*cp = '?';
-			}
-			*cp = 0;
+            val = ((__u8 *) attr) + val_off;
+            memset(label_str, 0, sizeof(label_str));
+            unicode_16le_to_utf8(label_str, sizeof(label_str), val, val_len);
+            printf("probe_ntfs --> volume_id_set_label_unicode16 --> %s\n", label_str);
 		}
 	}
 
@@ -1128,68 +1217,6 @@ static int probe_gfs2(struct blkid_probe *probe,
 		return 0;
 	}
 	return 1;
-}
-
-static void unicode_16be_to_utf8(unsigned char *str, int out_len,
-				 const unsigned char *buf, int in_len)
-{
-	int i, j;
-	unsigned int c;
-
-	for (i = j = 0; i + 2 <= in_len; i += 2) {
-		c = (buf[i] << 8) | buf[i+1];
-		if (c == 0) {
-			str[j] = '\0';
-			break;
-		} else if (c < 0x80) {
-			if (j+1 >= out_len)
-				break;
-			str[j++] = (unsigned char) c;
-		} else if (c < 0x800) {
-			if (j+2 >= out_len)
-				break;
-			str[j++] = (unsigned char) (0xc0 | (c >> 6));
-			str[j++] = (unsigned char) (0x80 | (c & 0x3f));
-		} else {
-			if (j+3 >= out_len)
-				break;
-			str[j++] = (unsigned char) (0xe0 | (c >> 12));
-			str[j++] = (unsigned char) (0x80 | ((c >> 6) & 0x3f));
-			str[j++] = (unsigned char) (0x80 | (c & 0x3f));
-		}
-	}
-	str[j] = '\0';
-}
-
-static void unicode_16le_to_utf8(unsigned char *str, int out_len,
-				 const unsigned char *buf, int in_len)
-{
-	int i, j;
-	unsigned int c;
-
-	for (i = j = 0; i + 2 <= in_len; i += 2) {
-		c = (buf[i+1] << 8) | buf[i];
-		if (c == 0) {
-			str[j] = '\0';
-			break;
-		} else if (c < 0x80) {
-			if (j+1 >= out_len)
-				break;
-			str[j++] = (unsigned char) c;
-		} else if (c < 0x800) {
-			if (j+2 >= out_len)
-				break;
-			str[j++] = (unsigned char) (0xc0 | (c >> 6));
-			str[j++] = (unsigned char) (0x80 | (c & 0x3f));
-		} else {
-			if (j+3 >= out_len)
-				break;
-			str[j++] = (unsigned char) (0xe0 | (c >> 12));
-			str[j++] = (unsigned char) (0x80 | ((c >> 6) & 0x3f));
-			str[j++] = (unsigned char) (0x80 | (c & 0x3f));
-		}
-	}
-	str[j] = '\0';
 }
 
 static int probe_hfs(struct blkid_probe *probe __BLKID_ATTR((unused)),

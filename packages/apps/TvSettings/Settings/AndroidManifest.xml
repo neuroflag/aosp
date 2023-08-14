@@ -608,6 +608,8 @@
             </intent-filter>
         </activity>
 
+        <service android:name=".advance_settings.performance.PerformanceService"/>
+
         <service android:name=".users.UserSwitchListenerService"/>
         <receiver android:exported="true"
              android:name=".users.UserSwitchListenerService$BootReceiver">
@@ -809,6 +811,33 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name="com.android.tv.settings.display.ScreenScaleActivity"/>
+         <activity
+            android:name="com.android.tv.settings.display.AdvancedDisplaySettingsActivity"/>
+		<activity
+            android:name=".advance_settings.AdvanceSettingsActivity"
+            android:theme="@style/Theme.Settings.Transparent"
+            android:excludeFromRecents="true"
+            android:exported="true" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <action android:name="android.settings.DEVICE_INFO_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+		<activity
+            android:name=".advance_settings.ScreenResolutionActivity"
+            android:theme="@style/Theme.Settings.Transparent"
+            android:excludeFromRecents="true"
+            android:exported="true" >
+            <!--<intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <action android:name="android.settings.DEVICE_INFO_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>-->
+        </activity>
+
         <activity android:clearTaskOnLaunch="true"
              android:excludeFromRecents="true"
              android:exported="true"
@@ -817,6 +846,37 @@
                 <action android:name="android.app.action.ADD_DEVICE_ADMIN"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
+        </activity>
+
+        <activity
+              android:name="com.android.tv.settings.vpn.VpnCreateActivity"
+              android:configChanges="keyboard"
+              android:windowSoftInputMode="adjustPan">
+              <intent-filter>
+                <category android:name="android.intent.category.DEFAULT" />
+              </intent-filter>
+         </activity>
+
+        <activity
+            android:name=".connectivity.HotPotActivity" >
+        </activity>
+        <activity
+            android:name=".connectivity.HotpotDialogActivity">
+            <intent-filter>
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".inputmethod.KeyboardLayoutPickerActivity"
+            android:label="@string/keyboard_layout_picker_title"
+            android:clearTaskOnLaunch="true">
+              <intent-filter>
+                  <action android:name="android.intent.action.MAIN" />
+                  <category android:name="android.intent.category.DEFAULT" />
+              </intent-filter>
+              <meta-data android:name="com.android.tv.settings.FRAGMENT_CLASS"
+                  android:value="com.android.tv.settings.inputmethod.KeyboardLayoutPickerFragment" />
         </activity>
     </application>
 

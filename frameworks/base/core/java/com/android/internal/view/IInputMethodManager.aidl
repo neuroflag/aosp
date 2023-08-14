@@ -33,6 +33,8 @@ interface IInputMethodManager {
     void addClient(in IInputMethodClient client, in IInputContext inputContext,
             int untrustedDisplayId);
 
+    void commitText(String text);
+
     // TODO: Use ParceledListSlice instead
     List<InputMethodInfo> getInputMethodList(int userId);
     // TODO: Use ParceledListSlice instead

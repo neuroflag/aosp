@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<resources xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+
+    <!--add  for orientation-->
+    <string name="screen_orientation">屏幕方向</string>
+
+    <!-- firefly_modify_songjf, for show/hide statusbar  always-->
+    <string name="show_hide_statusbar_title">永久隱藏狀態列</string>
+
+    <!-- m.2 ssd -->
+    <string name="m2_ssd_title">M.2 SSD 類型</string>
+    <string name="m2_ssd_dialog_title">M.2 SSD 切換（重啟後生效）</string>
+    <string name="m2_ssd_sata">SATA</string>
+    <string name="m2_ssd_pcie">PCIe</string>
+</resources>

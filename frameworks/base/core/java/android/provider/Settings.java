@@ -3940,6 +3940,18 @@ public final class Settings {
         public static final String DIM_SCREEN = "dim_screen";
 
         /**
+         * Ethernet
+         * @hide
+         */
+        public static final String ETHERNET_ON = "etnernet_on";
+
+        /**
+         * AuxEthernet
+         * @hide
+         */
+        public static final String AUX_ETHERNET_ON = "aux_etnernet_on";
+
+        /**
          * The display color mode.
          * @hide
          */
@@ -4494,6 +4506,41 @@ public final class Settings {
         @UnsupportedAppUsage
         public static final String HIDE_ROTATION_LOCK_TOGGLE_FOR_ACCESSIBILITY =
                 "hide_rotation_lock_toggle_for_accessibility";
+
+        /**
+         * screenshot button show.
+         *
+         * @hide
+         */
+        public static final String SCREENSHOT_BUTTON_SHOW = "screenshot_button_show";
+
+
+         /**
+         * if enabled while show rotation in SystenUI and Settings-DisplaySettings
+         * @hide
+         */
+        public static final String ENABLE_ROTATION_BY_USER = "enable_rotation_by_user";
+
+        /**
+         *firefly_modify_songjf
+         *hidebar button wether display
+         * @hide
+         */
+        public static final String HIDEBAR_BUTTON_SHOW = "hidebar_button_show";
+
+        /**
+         *firefly_modify_songjf
+         *hide status bar
+         * @hide
+         */
+        public static final String ALWAYS_HIDE_BAR="always_hide_bar";
+
+        /**
+         *firefly_modify_songjf
+         *set thirdparty showdown menu,null will use default
+         * @hide
+         */
+        public static final String SHUTDOWN_COMPONENT_NAME="shutdown_component_name";
 
         /**
          * Whether the phone vibrates when it is ringing due to an incoming call. This will

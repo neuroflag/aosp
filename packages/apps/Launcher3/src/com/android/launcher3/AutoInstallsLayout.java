@@ -40,6 +40,7 @@ import android.util.Xml;
 
 import androidx.annotation.Nullable;
 
+import com.android.launcher3.config.FeatureFlags;
 import com.android.launcher3.LauncherProvider.SqlArguments;
 import com.android.launcher3.LauncherSettings.Favorites;
 import com.android.launcher3.icons.GraphicsUtils;
@@ -243,13 +244,15 @@ public class AutoInstallsLayout {
         if (HOTSEAT_CONTAINER_NAME.equals(getAttributeValue(parser, ATTR_CONTAINER))) {
             out[0] = Favorites.CONTAINER_HOTSEAT;
             // Hack: hotseat items are stored using screen ids
-            out[1] = Integer.parseInt(getAttributeValue(parser, ATTR_RANK));
+            int rank = Integer.parseInt(getAttributeValue(parser, ATTR_RANK));
+            out[1] = (FeatureFlags.NO_ALL_APPS_ICON || rank < mIdp.getAllAppsButtonRank())
+                    ? rank : (rank + 1);
         } else {
             out[0] = Favorites.CONTAINER_DESKTOP;
             out[1] = Integer.parseInt(getAttributeValue(parser, ATTR_SCREEN));
         }
     }
-
+    
     /**
      * Parses the current node and returns the number of elements added.
      */

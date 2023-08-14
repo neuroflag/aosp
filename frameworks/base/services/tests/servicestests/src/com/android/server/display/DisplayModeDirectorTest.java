@@ -16,12 +16,9 @@
 
 package com.android.server.display;
 
-import static android.hardware.display.DisplayManager.DeviceConfig.KEY_FIXED_REFRESH_RATE_HIGH_AMBIENT_BRIGHTNESS_THRESHOLDS;
-import static android.hardware.display.DisplayManager.DeviceConfig.KEY_FIXED_REFRESH_RATE_HIGH_DISPLAY_BRIGHTNESS_THRESHOLDS;
-import static android.hardware.display.DisplayManager.DeviceConfig.KEY_FIXED_REFRESH_RATE_LOW_AMBIENT_BRIGHTNESS_THRESHOLDS;
-import static android.hardware.display.DisplayManager.DeviceConfig.KEY_FIXED_REFRESH_RATE_LOW_DISPLAY_BRIGHTNESS_THRESHOLDS;
-import static android.hardware.display.DisplayManager.DeviceConfig.KEY_REFRESH_RATE_IN_HIGH_ZONE;
-import static android.hardware.display.DisplayManager.DeviceConfig.KEY_REFRESH_RATE_IN_LOW_ZONE;
+import static android.hardware.display.DisplayManager.DeviceConfig.KEY_PEAK_REFRESH_RATE_AMBIENT_BRIGHTNESS_THRESHOLDS;
+import static android.hardware.display.DisplayManager.DeviceConfig.KEY_PEAK_REFRESH_RATE_DISPLAY_BRIGHTNESS_THRESHOLDS;
+import static android.hardware.display.DisplayManager.DeviceConfig.KEY_REFRESH_RATE_IN_ZONE;
 
 import static com.android.server.display.DisplayModeDirector.Vote.PRIORITY_FLICKER;
 
@@ -553,7 +550,7 @@ public class DisplayModeDirectorTest {
 
         void setRefreshRateInLowZone(int fps) {
             putPropertyAndNotify(
-                    DeviceConfig.NAMESPACE_DISPLAY_MANAGER, KEY_REFRESH_RATE_IN_LOW_ZONE,
+                    DeviceConfig.NAMESPACE_DISPLAY_MANAGER, KEY_REFRESH_RATE_IN_ZONE,
                     String.valueOf(fps));
         }
 
@@ -566,7 +563,7 @@ public class DisplayModeDirectorTest {
 
             putPropertyAndNotify(
                     DeviceConfig.NAMESPACE_DISPLAY_MANAGER,
-                    KEY_FIXED_REFRESH_RATE_LOW_DISPLAY_BRIGHTNESS_THRESHOLDS,
+                    KEY_PEAK_REFRESH_RATE_DISPLAY_BRIGHTNESS_THRESHOLDS,
                     thresholds);
         }
 
@@ -579,39 +576,7 @@ public class DisplayModeDirectorTest {
 
             putPropertyAndNotify(
                     DeviceConfig.NAMESPACE_DISPLAY_MANAGER,
-                    KEY_FIXED_REFRESH_RATE_LOW_AMBIENT_BRIGHTNESS_THRESHOLDS,
-                    thresholds);
-        }
-
-        void setRefreshRateInHighZone(int fps) {
-            putPropertyAndNotify(
-                    DeviceConfig.NAMESPACE_DISPLAY_MANAGER, KEY_REFRESH_RATE_IN_HIGH_ZONE,
-                    String.valueOf(fps));
-        }
-
-        void setHighDisplayBrightnessThresholds(int[] brightnessThresholds) {
-            String thresholds = toPropertyValue(brightnessThresholds);
-
-            if (DEBUG) {
-                Slog.e(TAG, "Brightness Thresholds = " + thresholds);
-            }
-
-            putPropertyAndNotify(
-                    DeviceConfig.NAMESPACE_DISPLAY_MANAGER,
-                    KEY_FIXED_REFRESH_RATE_HIGH_DISPLAY_BRIGHTNESS_THRESHOLDS,
-                    thresholds);
-        }
-
-        void setHighAmbientBrightnessThresholds(int[] ambientThresholds) {
-            String thresholds = toPropertyValue(ambientThresholds);
-
-            if (DEBUG) {
-                Slog.e(TAG, "Ambient Thresholds = " + thresholds);
-            }
-
-            putPropertyAndNotify(
-                    DeviceConfig.NAMESPACE_DISPLAY_MANAGER,
-                    KEY_FIXED_REFRESH_RATE_HIGH_AMBIENT_BRIGHTNESS_THRESHOLDS,
+                    KEY_PEAK_REFRESH_RATE_AMBIENT_BRIGHTNESS_THRESHOLDS,
                     thresholds);
         }
 

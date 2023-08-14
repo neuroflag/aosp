@@ -892,12 +892,16 @@ status_t CameraSource::reset() {
             isTokenValid = true;
         }
         releaseQueuedFrames();
+        int64_t waitEncodingFrameTimes = 0;
         while (!mFramesBeingEncoded.empty()) {
             if (NO_ERROR !=
                 mFrameCompleteCondition.waitRelative(mLock,
                         mTimeBetweenFrameCaptureUs * 1000LL + CAMERA_SOURCE_TIMEOUT_NS)) {
                 ALOGW("Timed out waiting for outstanding frames being encoded: %zu",
                     mFramesBeingEncoded.size());
+                waitEncodingFrameTimes++;
+                // every round is 3s, totally wait 1.5 min for buffer returning
+                CHECK(waitEncodingFrameTimes < 30);
             }
         }
         stopCameraRecording();
@@ -1081,6 +1085,7 @@ status_t CameraSource::read(
 
     {
         Mutex::Autolock autoLock(mLock);
+        int64_t waitFrameTimes = 0;
         while (mStarted && !mEos && mFramesReceived.empty()) {
             if (NO_ERROR !=
                 mFrameAvailableCondition.waitRelative(mLock,
@@ -1092,6 +1097,8 @@ status_t CameraSource::read(
                 }
                 ALOGW("Timed out waiting for incoming camera video frames: %" PRId64 " us",
                     mLastFrameTimestampUs);
+                waitFrameTimes++;
+                CHECK(waitFrameTimes < 30);
             }
         }
         if (!mStarted) {
@@ -1134,9 +1141,22 @@ status_t CameraSource::setStopTimeUs(int64_t stopTimeUs) {
 }
 
 bool CameraSource::shouldSkipFrameLocked(int64_t timestampUs) {
+    if (mStarted && mNumFramesReceived == 0 &&
+        (timestampUs - mStartTimeUs > 5000000 || mStartTimeUs - timestampUs > 5000000)) {
+        ALOGD("Abnormal timestamp(%lld), systemTime(%lld), mStartTimeUs(%lld)",
+            (long long)timestampUs, (long long)(systemTime() / 1000), (long long)mStartTimeUs);
+    }
+    if (mStarted && mNumFramesReceived > 0 && timestampUs - mLastFrameTimestampUs > 5000000) {
+        ALOGD("Abnormal Large Gap timestamp(%lld), systemTime(%lld), mLastFrameTimestampUs(%lld)",
+            (long long)timestampUs, (long long)(systemTime() / 1000), (long long)mLastFrameTimestampUs);
+    }
     if (!mStarted || (mNumFramesReceived == 0 && timestampUs < mStartTimeUs)) {
         ALOGV("Drop frame at %lld/%lld us", (long long)timestampUs, (long long)mStartTimeUs);
         return true;
+    }
+
+    if (mStarted && mNumFramesReceived == 0) {
+        ALOGD("First frame comes timestampUs=%lld", (long long)timestampUs);
     }
 
     if (mStopSystemTimeUs != -1 && timestampUs >= mStopSystemTimeUs) {

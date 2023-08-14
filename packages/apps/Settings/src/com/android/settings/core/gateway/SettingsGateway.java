@@ -79,10 +79,12 @@ import com.android.settings.deviceinfo.StorageSettings;
 import com.android.settings.deviceinfo.aboutphone.MyDeviceInfoFragment;
 import com.android.settings.deviceinfo.firmwareversion.FirmwareVersionSettings;
 import com.android.settings.deviceinfo.legal.ModuleLicensesDashboard;
+import com.android.settings.display.HdmiSettings;
 import com.android.settings.display.NightDisplaySettings;
 import com.android.settings.display.darkmode.DarkModeSettingsFragment;
 import com.android.settings.dream.DreamSettings;
 import com.android.settings.enterprise.EnterprisePrivacySettings;
+import com.android.settings.ethernet.EthernetSettings;
 import com.android.settings.fuelgauge.AdvancedPowerUsageDetail;
 import com.android.settings.fuelgauge.PowerUsageSummary;
 import com.android.settings.fuelgauge.batterysaver.BatterySaverScheduleSettings;
@@ -142,6 +144,7 @@ import com.android.settings.sound.MediaControlsSettings;
 import com.android.settings.support.SupportDashboardActivity;
 import com.android.settings.system.ResetDashboardFragment;
 import com.android.settings.system.SystemDashboardFragment;
+import com.android.settings.ScreenshotSettings;
 import com.android.settings.tts.TextToSpeechSettings;
 import com.android.settings.users.UserSettings;
 import com.android.settings.vpn2.VpnSettings;
@@ -170,6 +173,7 @@ public class SettingsGateway {
             AdvancedConnectedDeviceDashboardFragment.class.getName(),
             CreateShortcut.class.getName(),
             WifiSettings.class.getName(),
+            ScreenshotSettings.class.getName(),
             WifiSettings2.class.getName(),
             ConfigureWifiSettings.class.getName(),
             SavedAccessPointsWifiSettings.class.getName(),
@@ -180,6 +184,8 @@ public class SettingsGateway {
             WifiTetherSettings.class.getName(),
             BackgroundCheckSummary.class.getName(),
             VpnSettings.class.getName(),
+            EthernetSettings.class.getName(),
+            HdmiSettings.class.getName(),
             DataSaverSummary.class.getName(),
             DateTimeSettings.class.getName(),
             LocaleListEditor.class.getName(),
@@ -314,6 +320,7 @@ public class SettingsGateway {
             // Home page
             Settings.NetworkDashboardActivity.class.getName(),
             Settings.ConnectedDeviceDashboardActivity.class.getName(),
+            Settings.ScreenshotSettingsActivity.class.getName(),
             Settings.AppAndNotificationDashboardActivity.class.getName(),
             Settings.DisplaySettingsActivity.class.getName(),
             Settings.SoundSettingsActivity.class.getName(),
@@ -347,5 +354,7 @@ public class SettingsGateway {
             Settings.MyDeviceInfoActivity.class.getName(),
             Settings.ModuleLicensesActivity.class.getName(),
             UserBackupSettingsActivity.class.getName(),
+            // Home page > Display
+            Settings.HdmiSettingsActivity.class.getName(),
     };
 }

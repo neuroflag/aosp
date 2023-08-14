@@ -465,7 +465,7 @@ public class PackageInstallerActivity extends AlertActivity {
 
     private void handleUnknownSources() {
         if (mOriginatingPackage == null) {
-            Log.i(TAG, "No source found for package " + mPkgInfo.packageName);
+            Log.i(TAG, "xxx No source found for package " + mPkgInfo.packageName);
             showDialogInner(DLG_ANONYMOUS_SOURCE);
             return;
         }
@@ -476,11 +476,12 @@ public class PackageInstallerActivity extends AlertActivity {
                 mOriginatingUid, mOriginatingPackage);
         switch (appOpMode) {
             case AppOpsManager.MODE_DEFAULT:
-                mAppOpsManager.setMode(appOpCode, mOriginatingUid,
-                        mOriginatingPackage, AppOpsManager.MODE_ERRORED);
+                // mAppOpsManager.setMode(appOpCode, mOriginatingUid,
+                //         mOriginatingPackage, AppOpsManager.MODE_ERRORED);
                 // fall through
             case AppOpsManager.MODE_ERRORED:
-                showDialogInner(DLG_EXTERNAL_SOURCE_BLOCKED);
+                // showDialogInner(DLG_EXTERNAL_SOURCE_BLOCKED);
+                initiateInstall();
                 break;
             case AppOpsManager.MODE_ALLOWED:
                 initiateInstall();

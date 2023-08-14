@@ -21,6 +21,8 @@ import android.media.MediaMetadataRetriever;
 
 import java.io.FileDescriptor;
 
+import com.android.camera.debug.Log;
+
 public class Thumbnail {
     public static Bitmap createVideoThumbnailBitmap(FileDescriptor fd, int targetWidth) {
         return createVideoThumbnailBitmap(null, fd, targetWidth);
@@ -32,6 +34,7 @@ public class Thumbnail {
 
     private static Bitmap createVideoThumbnailBitmap(String filePath, FileDescriptor fd,
             int targetWidth) {
+        Log.d(new Log.Tag("Thumbnail"), "MediaMetadataRetriever createVideoThumbnailBitmap");
         Bitmap bitmap = null;
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
@@ -61,8 +64,13 @@ public class Thumbnail {
             float scale = (float) targetWidth / width;
             int w = Math.round(scale * width);
             int h = Math.round(scale * height);
-            bitmap = Bitmap.createScaledBitmap(bitmap, w, h, true);
+            Bitmap b1 = Bitmap.createScaledBitmap(bitmap, w, h, true);
+            if (b1 != bitmap) {
+                bitmap.recycle();
+                bitmap = b1;
+            }
         }
+        Log.d(new Log.Tag("Thumbnail"), "MediaMetadataRetriever createVideoThumbnailBitmap end");
         return bitmap;
     }
 }

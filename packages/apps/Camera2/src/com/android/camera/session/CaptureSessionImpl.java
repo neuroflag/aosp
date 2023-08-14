@@ -198,6 +198,7 @@ public class CaptureSessionImpl implements CaptureSession {
     @Override
     public synchronized void startEmpty(@Nullable ImageLifecycleListener listener,
           @Nonnull Size pictureSize) {
+        Log.d(TAG, "startEmpty :" + mIsFinished);
         if (mIsFinished) {
             return;
         }
@@ -218,6 +219,7 @@ public class CaptureSessionImpl implements CaptureSession {
     @Override
     public synchronized void startSession(@Nullable ImageLifecycleListener listener,
           @Nonnull Bitmap placeholder, int progressMessageId) {
+        Log.d(TAG, "startSession1 :" + mIsFinished);
         if (mIsFinished) {
             return;
         }
@@ -239,6 +241,7 @@ public class CaptureSessionImpl implements CaptureSession {
     @Override
     public synchronized void startSession(@Nullable ImageLifecycleListener listener,
           @Nonnull byte[] placeholder, int progressMessageId) {
+        Log.d(TAG, "startSession2 :" + mIsFinished);
         if (mIsFinished) {
             return;
         }
@@ -264,6 +267,7 @@ public class CaptureSessionImpl implements CaptureSession {
     @Override
     public synchronized void startSession(@Nullable ImageLifecycleListener listener,
           @Nonnull Uri uri, int progressMessageId) {
+        Log.d(TAG, "startSession3 :" + mIsFinished);
         if (listener != null) {
             mImageLifecycleListener = listener;
             mImageLifecycleListener.onCaptureStarted();
@@ -296,6 +300,7 @@ public class CaptureSessionImpl implements CaptureSession {
     @Override
     public synchronized ListenableFuture<Optional<Uri>> saveAndFinish(byte[] data, int width,
           int height, int orientation, ExifInterface exif) {
+        Log.d(TAG,"saveAndFinish");
         final SettableFuture<Optional<Uri>> futureResult = SettableFuture.create();
 
         if (mImageLifecycleListener != null) {

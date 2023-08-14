@@ -42,6 +42,7 @@
 
 #include <system/audio.h>
 #include <system/audio_policy.h>
+#include <cutils/properties.h>
 
 namespace android {
 
@@ -80,15 +81,28 @@ void AudioPolicyService::onFirstRef()
     // load audio processing modules
     sp<AudioPolicyEffects> audioPolicyEffects = new AudioPolicyEffects();
     sp<UidPolicy> uidPolicy = new UidPolicy(this);
-    sp<SensorPrivacyPolicy> sensorPrivacyPolicy = new SensorPrivacyPolicy(this);
     {
         Mutex::Autolock _l(mLock);
         mAudioPolicyEffects = audioPolicyEffects;
         mUidPolicy = uidPolicy;
-        mSensorPrivacyPolicy = sensorPrivacyPolicy;
     }
-    uidPolicy->registerSelf();
-    sensorPrivacyPolicy->registerSelf();
+
+    // for bootvide
+    char value[PROPERTY_VALUE_MAX];
+    property_get("persist.sys.bootvideo.enable", value, "false");
+    if(!strcmp(value, "true")) {
+        mOutputCommandThread->registerUidCommand(uidPolicy);
+        ALOGD("bootvideo enable,delay run Policy registerSelf");
+    } else {
+        uidPolicy->registerSelf();
+
+        sp<SensorPrivacyPolicy> sensorPrivacyPolicy = new SensorPrivacyPolicy(this);
+        {
+            Mutex::Autolock _l(mLock);
+            mSensorPrivacyPolicy = sensorPrivacyPolicy;
+        }
+        sensorPrivacyPolicy->registerSelf();
+    } 
 }
 
 AudioPolicyService::~AudioPolicyService()
@@ -103,10 +117,13 @@ AudioPolicyService::~AudioPolicyService()
     mAudioPolicyEffects.clear();
 
     mUidPolicy->unregisterSelf();
-    mSensorPrivacyPolicy->unregisterSelf();
 
     mUidPolicy.clear();
-    mSensorPrivacyPolicy.clear();
+
+    if(mSensorPrivacyPolicy != NULL ){
+        mSensorPrivacyPolicy->unregisterSelf();
+        mSensorPrivacyPolicy.clear();
+    }
 }
 
 // A notification client is always registered by AudioSystem when the client process
@@ -467,6 +484,17 @@ void AudioPolicyService::updateUidStates_l()
     bool rttCallActive = (isInCall || isInCommunication)
             && mUidPolicy->isRttEnabled();
     bool onlyHotwordActive = true;
+
+    // for boot video,delay init SensorPrivacyPolicy to save 4s time.
+    char decrypt[PROPERTY_VALUE_MAX];
+    property_get("persist.sys.bootvideo.enable",decrypt, "false");
+    if(!strcmp(decrypt, "true")) {
+        if (mSensorPrivacyPolicy.get() == NULL) {
+            mSensorPrivacyPolicy = new SensorPrivacyPolicy(this);
+            mSensorPrivacyPolicy->registerSelf();
+        }
+        
+    }  // boot video end.
 
     // if Sensor Privacy is enabled then all recordings should be silenced.
     if (mSensorPrivacyPolicy->isSensorPrivacyEnabled()) {
@@ -1366,6 +1394,10 @@ bool AudioPolicyService::AudioCommandThread::threadLoop()
                     svc->doOnNewAudioModulesAvailable();
                     mLock.lock();
                     } break;
+                case REGISTER_UID: {
+                    RegisterData *data = (RegisterData *)command->mParam.get();
+                    data->mUidPolicy->registerSelf();
+                    } break;
 
                 default:
                     ALOGW("AudioCommandThread() unknown command %d", command->mCommand);
@@ -1450,6 +1482,15 @@ status_t AudioPolicyService::AudioCommandThread::dump(int fd)
     dumpReleaseLock(mLock, locked);
 
     return NO_ERROR;
+}
+
+void AudioPolicyService::AudioCommandThread::registerUidCommand(sp<UidPolicy> uidpolicy) {
+    sp<AudioCommand> command = new AudioCommand();
+    command->mCommand = REGISTER_UID;
+    sp<RegisterData> data = new RegisterData();
+    data->mUidPolicy = uidpolicy;
+    command->mParam = data;
+    sendCommand(command);
 }
 
 status_t AudioPolicyService::AudioCommandThread::volumeCommand(audio_stream_type_t stream,

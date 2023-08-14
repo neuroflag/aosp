@@ -256,8 +256,13 @@ status_t AudioSource::read(
     }
 
     while (mStarted && mBuffersReceived.empty()) {
-        mFrameAvailableCondition.wait(mLock);
+        if (NO_ERROR != mFrameAvailableCondition.waitRelative(mLock, 3000000000LL)) {
+            ALOGW("Timed out waiting for incoming audio frames: %" PRId64 " us", mLastFrameTimestampUs);
+        }
         if (mNoMoreFramesToRead) {
+            return OK;
+        }
+        if (mStopSystemTimeUs != -1 && systemTime() / 1000ll >= mStopSystemTimeUs) {
             return OK;
         }
     }

@@ -32,6 +32,7 @@ public class VideoRotationMetadataLoader {
     }
 
     static boolean loadRotationMetadata(final FilmstripItem data) {
+        Log.d(TAG, "MediaMetadataRetriever loadRotationMetadata");
         final String path = data.getData().getFilePath();
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
@@ -48,11 +49,12 @@ public class VideoRotationMetadataLoader {
                     MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
 
             data.getMetadata().setVideoHeight(Integer.parseInt(val));
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             // setDataSource() can cause RuntimeException beyond
             // IllegalArgumentException. e.g: data contain *.avi file.
             Log.e(TAG, "MediaMetdataRetriever.setDataSource() fail", ex);
         }
+        Log.d(TAG, "MediaMetadataRetriever loadRotationMetadata end");
         return true;
     }
 }

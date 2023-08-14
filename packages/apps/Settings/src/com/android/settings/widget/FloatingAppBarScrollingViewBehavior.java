@@ -19,6 +19,7 @@ package com.android.settings.widget;
 import android.content.Context;
 import android.graphics.Color;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.View;
 
 import androidx.annotation.VisibleForTesting;
@@ -33,19 +34,43 @@ import com.google.android.material.appbar.AppBarLayout;
 public class FloatingAppBarScrollingViewBehavior extends AppBarLayout.ScrollingViewBehavior {
     private boolean initialized;
 
+    // 列表顶部和title底部重合时，列表的滑动距离。
+    private float deltaY;
+    private AppBarLayout appBarLayout;
+
     public FloatingAppBarScrollingViewBehavior(Context context, AttributeSet attrs) {
         super(context, attrs);
     }
 
     @Override
     public boolean onDependentViewChanged(CoordinatorLayout parent, View child, View dependency) {
-        boolean changed = super.onDependentViewChanged(parent, child, dependency);
-        if (!initialized && dependency instanceof AppBarLayout) {
-            initialized = true;
-            AppBarLayout appBarLayout = (AppBarLayout) dependency;
-            setAppBarLayoutTransparent(appBarLayout);
+        if (appBarLayout == null) {
+            appBarLayout = (AppBarLayout) dependency;
+            if(!initialized){
+                initialized = true;
+                setAppBarLayoutTransparent(appBarLayout);
+            }
+         }
+
+        final boolean result = super.onDependentViewChanged(parent, child, dependency);
+        final int bottomPadding = calculateBottomPadding(appBarLayout);
+        final boolean paddingChanged = bottomPadding != child.getPaddingBottom();
+        if (paddingChanged) {
+
+            child.setPadding(
+                    child.getPaddingLeft(),
+                    child.getPaddingTop() ,
+                    child.getPaddingRight(),
+                    bottomPadding);
+            child.requestLayout();
+
         }
-        return changed;
+        return paddingChanged || result;
+    }
+
+    private int calculateBottomPadding(AppBarLayout dependency) {
+        final int totalScrollRange = dependency.getTotalScrollRange();
+        return totalScrollRange + dependency.getTop();
     }
 
     @VisibleForTesting

@@ -1099,7 +1099,19 @@ public class StatusBar extends SystemUI implements DemoMode,
         mNotificationPanelViewController.setHeadsUpManager(mHeadsUpManager);
         mNotificationLogger.setHeadsUpManager(mHeadsUpManager);
 
-        createNavigationBar(result);
+        //createNavigationBar(result);
+        try {
+            boolean hide_systembar = Settings.System.getInt(mContext.getContentResolver(),Settings.System.ALWAYS_HIDE_BAR,0) != 0;
+
+            if (DEBUG) Log.v(TAG, "hasNavigationBar=" + !hide_systembar);
+            if (!hide_systembar) {
+                 createNavigationBar(result);
+            }
+        } catch (Exception ex) {
+            // no window manager? good luck with that
+        }
+
+        changeBarHideStatus();
 
         if (ENABLE_LOCKSCREEN_WALLPAPER && mWallpaperSupported) {
             mLockscreenWallpaper = mLockscreenWallpaperLazy.get();
@@ -1288,6 +1300,9 @@ public class StatusBar extends SystemUI implements DemoMode,
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         filter.addAction(DevicePolicyManager.ACTION_SHOW_DEVICE_MONITORING_DIALOG);
+        filter.addAction(Intent.ACTION_HIDE_BAR);
+        filter.addAction(Intent.ACTION_SHOW_BAR);
+        filter.addAction(Intent.ACTION_ALWAYS_HIDE_BAR_CHANGE);
         mBroadcastDispatcher.registerReceiver(mBroadcastReceiver, filter, null, UserHandle.ALL);
     }
 
@@ -1360,6 +1375,58 @@ public class StatusBar extends SystemUI implements DemoMode,
                     mTmpInt2[1] + where.getHeight() / 2);
             mFalsingManager.onScreenOnFromTouch();
         }
+    }
+
+    /**firefly_modify_songjf, for show/hide statusbar**/
+    private boolean mBarIsAdd = true;
+    private static final int MSG_CHANGE_BAR_HIDE_STATUS = 2030;
+    private void changeBarHideStatus()
+    {
+        boolean hide_systembar = Settings.System.getInt(mContext.getContentResolver(),Settings.System.ALWAYS_HIDE_BAR,0) != 0;
+        if(hide_systembar)
+            removeBar(false);
+        else{
+            addBarInside();
+        }
+    }
+
+    private void addBarInside(){
+        boolean hide_systembar = Settings.System.getInt(mContext.getContentResolver(),Settings.System.ALWAYS_HIDE_BAR,0) != 0;
+        if (!mBarIsAdd && !hide_systembar){
+            Log.d(TAG,"add Bar");
+            NavigationBarView mNavigationBarView = mNavigationBarController.getDefaultNavigationBarView();
+
+            if (mNavigationBarView == null)
+                mNavigationBarController.createNavigationBars(true,null);
+
+            if (mPhoneStatusBarWindow != null)
+                mPhoneStatusBarWindow.setVisibility(View.VISIBLE);
+            mBarIsAdd = true;
+        }
+    }
+    private void removeBar(){
+        removeBar(true);
+    }
+
+    private void removeBar(boolean needToast){
+        if (mBarIsAdd){
+            Log.d(TAG,"remove Bar");
+            NavigationBarView mNavigationBarView = mNavigationBarController.getDefaultNavigationBarView();
+
+            if (mNavigationBarView != null)
+                mNavigationBarController.hideNavigationBar();
+
+            if (mPhoneStatusBarWindow != null)mPhoneStatusBarWindow.setVisibility(View.GONE);
+
+            mBarIsAdd = false;
+
+            //if(needToast)Toast.makeText(mContext, mContext.getResources().getString(R.string.hidebar_msg), 5000).show();
+        }
+    }
+
+    @Override // CommandQueue
+    public void addBar(){
+        addBarInside();
     }
 
     // TODO(b/117478341): This was left such that CarStatusBar can override this method.
@@ -1973,6 +2040,9 @@ public class StatusBar extends SystemUI implements DemoMode,
                     break;
                 case MSG_LAUNCH_TRANSITION_TIMEOUT:
                     onLaunchTransitionTimeout();
+                    break;
+                case MSG_CHANGE_BAR_HIDE_STATUS:
+                    changeBarHideStatus();
                     break;
             }
         }
@@ -2804,6 +2874,17 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             else if (DevicePolicyManager.ACTION_SHOW_DEVICE_MONITORING_DIALOG.equals(action)) {
                 mQSPanel.showDeviceMonitoringDialog();
+            }
+            else if(Intent.ACTION_HIDE_BAR.equals(action)) {
+                removeBar();
+            }
+            else if(Intent.ACTION_SHOW_BAR.equals(action)) {
+                addBarInside();
+            }
+            else if(Intent.ACTION_ALWAYS_HIDE_BAR_CHANGE.equals(action))
+            {
+                mHandler.removeMessages(MSG_CHANGE_BAR_HIDE_STATUS);
+                mHandler.sendEmptyMessageDelayed(MSG_CHANGE_BAR_HIDE_STATUS, 400);
             }
         }
     };

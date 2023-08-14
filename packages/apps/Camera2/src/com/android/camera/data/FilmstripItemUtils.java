@@ -147,7 +147,16 @@ public class FilmstripItemUtils {
         if (orientation != 0 && b != null) {
             Matrix m = new Matrix();
             m.setRotate(orientation);
-            b = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, false);
+            try {
+                Bitmap b1 = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, false);
+                if (b1 != b) {
+                    b.recycle();
+                    b = b1;
+                }
+            } catch (OutOfMemoryError e) {
+                // We have no memory to rotate. Return the original bitmap.
+                System.gc();
+            }
         }
 
         return b;
@@ -160,6 +169,7 @@ public class FilmstripItemUtils {
      * @return {@code null} if the loading failed.
      */
     public static Bitmap loadVideoThumbnail(String path) {
+        Log.d(TAG, "MediaMetadataRetriever loadVideoThumbnail");
         Bitmap bitmap = null;
         MediaMetadataRetriever retriever = new MediaMetadataRetriever();
         try {
@@ -171,10 +181,11 @@ public class FilmstripItemUtils {
             if (bitmap == null) {
                 bitmap = retriever.getFrameAtTime();
             }
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             Log.e(TAG, "MediaMetadataRetriever.setDataSource() fail:" + e.getMessage());
         }
         retriever.release();
+        Log.d(TAG, "MediaMetadataRetriever loadVideoThumbnail end");
         return bitmap;
     }
 }

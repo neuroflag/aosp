@@ -117,6 +117,7 @@
             android:usesCleartextTraffic="true"
             android:defaultToDeviceProtectedStorage="true"
             android:directBootAware="true"
+            android:name=".SettingsApplication"
             android:appComponentFactory="androidx.core.app.CoreComponentFactory">
 
         <uses-library android:name="org.apache.http.legacy" />
@@ -530,6 +531,62 @@
                   android:targetActivity="Settings$TetherSettingsActivity">
             <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
                 android:value="com.android.settings.TetherSettings" />
+        </activity-alias>
+
+        <activity android:name="Settings$EthernetSettingsActivity"
+            android:label="@string/ethernet_settings_title"
+            android:icon="@drawable/ic_settings_wireless"
+            android:taskAffinity="">
+                        <intent-filter>
+                <action android:name="com.android.settings.WIFI_TETHER_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.VOICE_LAUNCH" />
+                <category android:name="com.android.settings.SHORTCUT" />
+            </intent-filter>
+            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                android:value="com.android.settings.ethernet.EthernetSettings" />
+        </activity>
+
+        <!-- Keep compatibility with old shortcuts. -->
+        <activity-alias android:name=".EthernetSettings"
+            android:label="@string/ethernet_settings"
+            android:clearTaskOnLaunch="true"
+            android:targetActivity="Settings$EthernetSettingsActivity"
+            android:exported="true">
+            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                android:value="com.android.settings.EthernetSettings" />
+        </activity-alias>
+
+        <activity android:name="Settings$EthernetSettingsActivityExt"
+            android:label="@string/ethernet_settings_title_ext"
+            android:icon="@drawable/ic_settings_wireless"
+            android:taskAffinity="">
+                        <intent-filter>
+                <action android:name="com.android.settings.WIFI_TETHER_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.VOICE_LAUNCH" />
+                <category android:name="com.android.settings.SHORTCUT" />
+            </intent-filter>
+            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                android:value="com.android.settings.ethernet.EthernetSettingsExt" />
+        </activity>
+
+        <!-- Keep compatibility with old shortcuts. -->
+        <activity-alias android:name=".EthernetSettingsExt"
+            android:label="@string/ethernet_settings_ext"
+            android:clearTaskOnLaunch="true"
+            android:targetActivity="Settings$EthernetSettingsActivityExt"
+            android:exported="true">
+            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                android:value="com.android.settings.EthernetSettingsExt" />
         </activity-alias>
 
         <activity android:name="Settings$WifiP2pSettingsActivity">
@@ -3367,6 +3424,27 @@
                 android:value="com.android.settings.gestures.GlobalActionsPanelSettings" />
         </activity>
 
+        <!-- SCREENSHOT -->
+        <activity
+            android:name="Settings$ScreenshotSettingsActivity"
+            android:label="@string/screenshot_manager"
+            android:icon="@drawable/ic_homepage_screenshot"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:parentActivityName="Settings">
+            <intent-filter android:priority="1">
+                <action android:name="android.settings.SCREENSHOT_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter android:priority="60">
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="com.android.settings.SHORTCUT" />
+            </intent-filter>
+            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                android:value="com.android.settings.ScreenshotSettings" />
+            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                android:value="true" />
+        </activity>
+
         <activity android:name="Settings$PowerMenuSettingsActivity"
                   android:label="@string/power_menu_setting_name">
             <intent-filter>
@@ -3416,6 +3494,24 @@
                        android:value="com.android.settings.sound.MediaControlsSettings" />
         </activity>
 
+        <!-- HDMI -->
+        <activity android:name="Settings$HdmiSettingsActivity"
+            android:label="@string/hdmi_settings"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.VOICE_LAUNCH" />
+                <category android:name="com.android.settings.SHORTCUT" />
+            </intent-filter>
+            <meta-data android:name="com.android.settings.FRAGMENT_CLASS"
+                android:value="com.android.settings.display.HdmiSettings" />
+            <meta-data android:name="com.android.settings.PRIMARY_PROFILE_CONTROLLED"
+                android:value="true" />
+        </activity>
+
+        <activity android:name="com.android.settings.display.ScreenScaleActivity"/>
+
         <receiver
             android:name=".media.BluetoothPairingReceiver"
             android:exported="true"
@@ -3426,5 +3522,21 @@
         </receiver>
 
         <!-- This is the longest AndroidManifest.xml ever. -->
+
+        <receiver 
+            android:name=".BootReceiver">
+             <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                </intent-filter>
+            <intent-filter>
+                <action android:name="android.fireflyapi.action.run_power_off" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.fireflyapi.action.run_power_reboot" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+       </receiver>
     </application>
 </manifest>

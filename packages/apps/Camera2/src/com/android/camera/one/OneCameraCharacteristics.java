@@ -19,11 +19,13 @@ package com.android.camera.one;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.hardware.camera2.CameraCharacteristics;
+import com.android.ex.camera2.portability.CameraCapabilities;
 
 import com.android.camera.ui.motion.LinearScale;
 import com.android.camera.util.Size;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * The properties describing a OneCamera device. These properties are fixed for
@@ -143,4 +145,8 @@ public interface OneCameraCharacteristics {
      * @return true if this camera supports custom AutoExposure regions.
      */
     public boolean isAutoExposureSupported();
+    
+    public boolean isWhiteBalanceSupported();
+    
+    public Set<CameraCapabilities.WhiteBalance> getSupportedWhiteBalances();
 }

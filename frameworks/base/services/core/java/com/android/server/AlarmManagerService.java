@@ -22,6 +22,7 @@ import static android.app.AlarmManager.FLAG_ALLOW_WHILE_IDLE;
 import static android.app.AlarmManager.FLAG_ALLOW_WHILE_IDLE_UNRESTRICTED;
 import static android.app.AlarmManager.RTC;
 import static android.app.AlarmManager.RTC_WAKEUP;
+import static android.app.AlarmManager.BOOT;
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.os.UserHandle.USER_SYSTEM;
 
@@ -132,8 +133,9 @@ class AlarmManagerService extends SystemService {
     private static final int RTC_MASK = 1 << RTC;
     private static final int ELAPSED_REALTIME_WAKEUP_MASK = 1 << ELAPSED_REALTIME_WAKEUP;
     private static final int ELAPSED_REALTIME_MASK = 1 << ELAPSED_REALTIME;
+    private static final int BOOT_MASK = 1 << AlarmManager.BOOT;
     static final int TIME_CHANGED_MASK = 1 << 16;
-    static final int IS_WAKEUP_MASK = RTC_WAKEUP_MASK|ELAPSED_REALTIME_WAKEUP_MASK;
+    static final int IS_WAKEUP_MASK = RTC_WAKEUP_MASK|ELAPSED_REALTIME_WAKEUP_MASK|BOOT_MASK;
 
     // Mask for testing whether a given alarm type is wakeup vs non-wakeup
     static final int TYPE_NONWAKEUP_MASK = 0x1; // low bit => non-wakeup
@@ -745,6 +747,12 @@ class AlarmManagerService extends SystemService {
             for (int i = 0; i < alarms.size(); ) {
                 Alarm alarm = alarms.get(i);
                 if (predicate.test(alarm)) {
+
+                    if(alarm.type == AlarmManager.BOOT){
+                        Slog.v(TAG, "alarm.when:"+alarm.when+",whenElapsed:"+alarm.whenElapsed);
+                        mInjector.updateRtcAlarm(alarm.when,false);
+                    }
+
                     alarms.remove(i);
                     if (!reOrdering) {
                         decrementAlarmCount(alarm.uid, 1);
@@ -1732,7 +1740,7 @@ class AlarmManagerService extends SystemService {
             interval = mConstants.MAX_INTERVAL;
         }
 
-        if (type < RTC_WAKEUP || type > ELAPSED_REALTIME) {
+        if (type < RTC_WAKEUP || type > BOOT) {
             throw new IllegalArgumentException("Invalid alarm type " + type);
         }
 
@@ -2038,8 +2046,17 @@ class AlarmManagerService extends SystemService {
                 rebatchAllAlarmsLocked(false);
             }
 
+            Slog.v(TAG,"setImplLocked type="+a.type+"   ,when="+a.when);
+            if(a.type == BOOT)
+                setLocked(BOOT,a.when);
+
             rescheduleKernelAlarmsLocked();
             updateNextAlarmClockLocked();
+        }
+
+        if(a.type == BOOT){
+            Slog.v(TAG,"setImplLocked a.type == BOOT");
+            mInjector.updateRtcAlarm(a.when,true);
         }
     }
 
@@ -3432,6 +3449,7 @@ class AlarmManagerService extends SystemService {
         case RTC_WAKEUP : return "RTC_WAKEUP";
         case ELAPSED_REALTIME : return "ELAPSED";
         case ELAPSED_REALTIME_WAKEUP: return "ELAPSED_WAKEUP";
+        case BOOT: return "BOOT";
         }
         return "--unknown--";
     }
@@ -3476,6 +3494,7 @@ class AlarmManagerService extends SystemService {
     private static native int waitForAlarm(long nativeData);
     private static native int setKernelTime(long nativeData, long millis);
     private static native int setKernelTimezone(long nativeData, int minuteswest);
+    private static native int updateRtcAlarm(long nativeData,long millis,boolean enabled);
     private static native long getNextAlarm(long nativeData, int type);
 
     private long getWhileIdleMinIntervalLocked(int uid) {
@@ -3896,6 +3915,10 @@ class AlarmManagerService extends SystemService {
             return AlarmManagerService.waitForAlarm(mNativeData);
         }
 
+        long getNativeData(){
+            return mNativeData;
+        }
+
         boolean isAlarmDriverPresent() {
             return mNativeData != 0;
         }
@@ -3933,6 +3956,12 @@ class AlarmManagerService extends SystemService {
         void setKernelTime(long millis) {
             if (mNativeData != 0) {
                 AlarmManagerService.setKernelTime(mNativeData, millis);
+            }
+        }
+
+        void updateRtcAlarm(long millis,boolean enabled){
+            if (mNativeData != 0) {
+                AlarmManagerService.updateRtcAlarm(mNativeData, millis,enabled);
             }
         }
 
@@ -4845,6 +4874,7 @@ class AlarmManagerService extends SystemService {
                 fs.nesting++;
             }
             if (alarm.type == ELAPSED_REALTIME_WAKEUP
+                    || alarm.type == BOOT
                     || alarm.type == RTC_WAKEUP) {
                 bs.numWakeup++;
                 fs.numWakeup++;

@@ -1334,7 +1334,9 @@ public class StorageManager {
     /** {@hide} */
     public long getPrimaryStorageSize() {
         return FileUtils.roundStorageSize(Environment.getDataDirectory().getTotalSpace()
-                + Environment.getRootDirectory().getTotalSpace());
+                + Environment.getRootDirectory().getTotalSpace()
+				+ Environment.getOemDirectory().getTotalSpace()
+				+ Environment.getVendorDirectory().getTotalSpace());
     }
 
     /** {@hide} */

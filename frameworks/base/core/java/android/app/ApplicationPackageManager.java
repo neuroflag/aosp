@@ -74,6 +74,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PersistableBundle;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.StrictMode;
@@ -165,6 +166,16 @@ public class ApplicationPackageManager extends PackageManager {
             }
             return mUserManager;
         }
+    }
+
+    @Override
+    public int getPackagePerformanceMode(String pkgName) {
+        try {
+            return mPM.getPackagePerformanceMode(pkgName);
+        } catch (RemoteException e) {
+            // Should never happen!
+        }
+        return PowerManager.PERFORMANCE_MODE_NORMAL;
     }
 
     @Override
@@ -668,6 +679,17 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public boolean hasSystemFeature(String name, int version) {
+        // Support vulkan v1.1 when antutu is running in forceground.
+        if (!SystemProperties.getBoolean("cts_gts.status", false) &&
+            name.equals("android.hardware.vulkan.version") &&
+            "true".equals(SystemProperties.get("persist.vendor.rk_vulkan"))) {
+            final String packageName = mContext.getOpPackageName();
+            if (packageName.contains("com.antutu.benchmark.full") ||
+                packageName.contains("com.antutu.ABenchMark")) {
+                Log.w("ATTU", "Support vulkan 1.1.0 now!");
+                return 4198400 >= version;
+            }
+        }
         return mHasSystemFeatureCache.query(new HasSystemFeatureQuery(name, version));
     }
 
@@ -3391,6 +3413,24 @@ public class ApplicationPackageManager extends PackageManager {
         try {
             List<String> mimeGroup = mPM.getMimeGroup(mContext.getPackageName(), group);
             return new ArraySet<>(mimeGroup);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public void setPackageUiModeType(String packageName, int oldUiMode, int newUiMode){
+        try {
+            mPM.setPackageUiModeType(packageName, oldUiMode, newUiMode);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public int getPackageUiModeType(String packageName) {
+        try {
+            return mPM.getPackageUiModeType(packageName);
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }

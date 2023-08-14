@@ -106,6 +106,7 @@ public class ResolutionSetting {
      */
     public Size getPictureSize(CameraId cameraId, Facing cameraFacing)
             throws OneCameraAccessException {
+            Log.d(TAG,"cameraId="+cameraId.getValue());
         final String pictureSizeSettingKey = cameraFacing == OneCamera.Facing.FRONT ?
                 Keys.KEY_PICTURE_SIZE_FRONT : Keys.KEY_PICTURE_SIZE_BACK;
 

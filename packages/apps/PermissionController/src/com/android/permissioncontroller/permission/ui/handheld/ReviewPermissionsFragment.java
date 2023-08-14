@@ -81,6 +81,8 @@ public final class ReviewPermissionsFragment extends PreferenceFragmentCompat
 
     private boolean mHasConfirmedRevoke;
 
+    private boolean mAutoAllowReviewPermissions = true;
+
     public static ReviewPermissionsFragment newInstance(PackageInfo packageInfo) {
         Bundle arguments = new Bundle();
         arguments.putParcelable(ReviewPermissionsFragment.EXTRA_PACKAGE_INFO, packageInfo);
@@ -117,7 +119,7 @@ public final class ReviewPermissionsFragment extends PreferenceFragmentCompat
             }
         }
 
-        if (!reviewRequired) {
+        if (!reviewRequired || mAutoAllowReviewPermissions) {
             // If the system called for a review but no groups are found, this means that all groups
             // are restricted. Hence there is nothing to review and instantly continue.
             confirmPermissionsReview();

@@ -1,4 +1,4 @@
-# Put some miscellaneous rules here
+# Put some miscellaneous rules herecopy-one-file
 
 # HACK: clear LOCAL_PATH from including last build target before calling
 # intermedites-dir-for
@@ -328,6 +328,14 @@ BUILD_KEYS := test-keys
 else
 BUILD_KEYS := dev-keys
 endif
+
+# For user fingerprint
+ifeq ($(TARGET_BUILD_VARIANT),eng)
+BUILD_KEYS := test-keys
+else
+BUILD_KEYS := release-keys
+endif
+
 BUILD_VERSION_TAGS += $(BUILD_KEYS)
 BUILD_VERSION_TAGS := $(subst $(space),$(comma),$(sort $(BUILD_VERSION_TAGS)))
 
@@ -337,12 +345,16 @@ $(intermediate_system_build_prop): PRIVATE_BUILD_DESC := $(build_desc)
 
 # The string used to uniquely identify the combined build and product; used by the OTA server.
 ifeq (,$(strip $(BUILD_FINGERPRINT)))
-  ifeq ($(strip $(HAS_BUILD_NUMBER)),false)
-    BF_BUILD_NUMBER := $(BUILD_USERNAME)$$($(DATE_FROM_FILE) +%m%d%H%M)
+  ifdef ROCKCHIP_BUILD_NUMBER
+    BF_BUILD_NUMBER := $(ROCKCHIP_BUILD_NUMBER)
   else
-    BF_BUILD_NUMBER := $(file <$(BUILD_NUMBER_FILE))
+    ifeq ($(strip $(HAS_BUILD_NUMBER)),false)
+      BF_BUILD_NUMBER := $(BUILD_USERNAME)$$($(DATE_FROM_FILE) +%m%d%H%M)
+    else
+      BF_BUILD_NUMBER := $(file <$(BUILD_NUMBER_FILE))
+    endif
   endif
-  BUILD_FINGERPRINT := $(PRODUCT_BRAND)/$(TARGET_PRODUCT)/$(TARGET_DEVICE):$(PLATFORM_VERSION)/$(BUILD_ID)/$(BF_BUILD_NUMBER):$(TARGET_BUILD_VARIANT)/$(BUILD_VERSION_TAGS)
+  BUILD_FINGERPRINT := $(PRODUCT_BRAND)/"rk356x"/"rk356x":$(PLATFORM_VERSION)/$(BUILD_ID)/$(BF_BUILD_NUMBER):$(TARGET_BUILD_VARIANT)/$(BUILD_VERSION_TAGS)
 endif
 # unset it for safety.
 BF_BUILD_NUMBER :=
@@ -527,6 +539,7 @@ endif
 	$(hide) echo ro.product.board="$(TARGET_BOOTLOADER_BOARD_NAME)">>$@
 	$(hide) echo ro.board.platform="$(TARGET_BOARD_PLATFORM)">>$@
 	$(hide) echo ro.hwui.use_vulkan="$(TARGET_USES_VULKAN)">>$@
+	$(hide) echo ro.build.fingerprint="$(BUILD_FINGERPRINT_FROM_FILE)">>$@
 ifdef TARGET_SCREEN_DENSITY
 	$(hide) echo ro.sf.lcd_density="$(TARGET_SCREEN_DENSITY)">>$@
 endif
@@ -1390,6 +1403,17 @@ endif # BUILDING_VENDOR_BOOT_IMAGE
 # This needs to be before the systemimage rules, because it adds to
 # ALL_DEFAULT_INSTALLED_MODULES, which those use to pick which files
 # go into the systemimage.
+INSTALLED_LOADER_TARGET := $(strip $(wildcard $(TARGET_DEVICE_DIR)/ota/loader/RK*Loader*.bin))
+
+INSTALLED_UBOOT_TARGET := $(strip $(wildcard u-boot/uboot.img))
+HAVE_TRUST_WITH_TA := $(shell test -f u-boot/trust_with_ta.img && echo yes)
+ifeq ($(HAVE_TRUST_WITH_TA),yes)
+INSTALLED_TRUST_TARGET := $(strip $(wildcard u-boot/trust_with_ta.img))
+else
+INSTALLED_TRUST_TARGET := $(strip $(wildcard u-boot/trust.img))
+endif
+
+INSTALLED_EBOOK_LOGO_TARGET := $(strip $(wildcard $(TARGET_DEVICE_DIR)/ota/logo.img))
 
 .PHONY: notice_files
 
@@ -1883,6 +1907,8 @@ ifdef BUILDING_RECOVERY_IMAGE
 INTERNAL_RECOVERYIMAGE_FILES := $(filter $(TARGET_RECOVERY_OUT)/%, \
     $(ALL_DEFAULT_INSTALLED_MODULES))
 
+recovery_contents := $(TOPDIR)device/rockchip/common/recovery_contents.sh
+
 INSTALLED_FILES_FILE_RECOVERY := $(PRODUCT_OUT)/installed-files-recovery.txt
 INSTALLED_FILES_JSON_RECOVERY := $(INSTALLED_FILES_FILE_RECOVERY:.txt=.json)
 
@@ -2214,6 +2240,7 @@ $(recovery_ramdisk): $(MKBOOTFS) $(COMPRESSION_COMMAND_DEPS) \
 	$(foreach recovery_text_file,$(generated_recovery_text_files), \
 	  cp -rf $(recovery_text_file) $(TARGET_RECOVERY_ROOT_OUT)/res/images/ &&) true
 	cp -f $(recovery_font) $(TARGET_RECOVERY_ROOT_OUT)/res/images/font.png
+	$(recovery_contents) $(TARGET_PRODUCT) $(PRODUCT_OUT) $(TARGET_BOARD_PLATFORM) $(TARGET_ROCKCHIP_PCBATEST) $(TARGET_ARCH)
 	$(foreach item,$(TARGET_PRIVATE_RES_DIRS), \
 	  cp -rf $(item) $(TARGET_RECOVERY_ROOT_OUT)/$(newline))
 	$(foreach item,$(recovery_fstab), \
@@ -3869,7 +3896,9 @@ ifeq ($(filter true,$(BUILDING_PRODUCT_IMAGE)),$(filter true,$(BOARD_USES_PRODUC
 ifeq ($(filter true,$(BUILDING_SYSTEM_EXT_IMAGE)),$(filter true,$(BOARD_USES_SYSTEM_EXTIMAGE)))
 
 check_vintf_compatible_log := $(intermediates)/check_vintf_compatible_log
+ifneq ($(BUILD_WITH_RK_EBOOK),true)
 check_vintf_all_deps += $(check_vintf_compatible_log)
+endif
 
 check_vintf_compatible_args :=
 check_vintf_compatible_deps := $(check_vintf_common_srcs)
@@ -4404,6 +4433,7 @@ endif
 ifdef DEVICE_MANIFEST_FILE
 	$(hide) echo "vintf_include_empty_vendor_sku=true" >> $@
 endif
+	$(hide) echo "booot_header_version=$(BOARD_BOOT_HEADER_VERSION)" >> $@
 
 .PHONY: misc_info
 misc_info: $(INSTALLED_MISC_INFO_TARGET)
@@ -4752,6 +4782,51 @@ endif
 	$(hide) echo "$(PRODUCT_OTA_PUBLIC_KEYS)" > $(zip_root)/META/otakeys.txt
 	$(hide) cp $(SELINUX_FC) $(zip_root)/META/file_contexts.bin
 	$(hide) cp $(INSTALLED_MISC_INFO_TARGET) $(zip_root)/META/misc_info.txt
+ifeq ($(INSTALLED_LOADER_TARGET),)
+	$(info No RK Loader for TARGET_DEVICE $(TARGET_DEVICE) to otapackage)
+else
+	$(info cp RK Loader:$(TARGET_DEVICE) to otapackage)
+	$(hide) cp $(INSTALLED_LOADER_TARGET) $(zip_root)/RKLoader.bin
+endif
+ifeq ($(INSTALLED_UBOOT_TARGET),)
+	$(info No uboot for uboot/uboot.img to otapackage)
+else
+ifeq ($(AB_OTA_UPDATER),true)
+	$(hide) mkdir -p $(zip_root)/IMAGES
+	$(hide) cp $(INSTALLED_UBOOT_TARGET) $(zip_root)/IMAGES/uboot.img
+else
+	$(hide) cp $(INSTALLED_UBOOT_TARGET) $(zip_root)/uboot.img
+endif
+endif
+ifeq ($(INSTALLED_TRUST_TARGET),)
+	$(info No trust for uboot/trust.img to otapackage)
+else
+ifeq ($(AB_OTA_UPDATER),true)
+	$(hide) mkdir -p $(zip_root)/IMAGES
+	$(hide) cp $(INSTALLED_TRUST_TARGET) $(zip_root)/IMAGES/trust.img
+else
+	$(hide) cp $(INSTALLED_TRUST_TARGET) $(zip_root)/trust.img
+endif
+endif
+ifdef TARGET_PREBUILT_RESOURCE
+	$(info package add resource.img to BOOT and RECOVERY)
+	$(hide) cp $(TARGET_PREBUILT_RESOURCE) $(zip_root)/BOOT/resource.img
+ifneq ($(TARGET_NO_RECOVERY),true)
+	$(hide) cp $(TARGET_PREBUILT_RESOURCE) $(zip_root)/RECOVERY/resource.img
+endif
+ifeq (1,$(strip $(shell expr $(BOARD_BOOT_HEADER_VERSION) \>= 3)))
+	$(hide) mkdir -p $(zip_root)/IMAGES
+	$(hide) cp $(TARGET_PREBUILT_RESOURCE) $(zip_root)/IMAGES/resource.img
+endif
+endif
+
+ifeq ($(INSTALLED_EBOOK_LOGO_TARGET),)
+	$(info No logo.img to otapackage)
+else
+	$(hide) mkdir -p $(zip_root)/IMAGES
+	$(hide) cp $(INSTALLED_EBOOK_LOGO_TARGET) $(zip_root)/IMAGES/logo.img
+endif
+
 ifneq ($(PRODUCT_SYSTEM_BASE_FS_PATH),)
 	$(hide) cp $(PRODUCT_SYSTEM_BASE_FS_PATH) \
 	  $(zip_root)/META/$(notdir $(PRODUCT_SYSTEM_BASE_FS_PATH))

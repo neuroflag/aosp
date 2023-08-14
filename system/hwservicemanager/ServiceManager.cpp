@@ -251,7 +251,8 @@ static void tryStartService(const std::string& fqName, const std::string& name) 
     // have an 'interface' entry in its .rc file OR if the service is already
     // running, then this will be a no-op. So, for instance, if a service is
     // deadlocked during startup, you will see this message repeatedly.
-    LOG(INFO) << "Since " << fqName << "/" << name
+    if(strcmp(fqName.c_str(),"android.hardware.radio@1.1::IRadio") != 0)
+        LOG(INFO) << "Since " << fqName << "/" << name
               << " is not registered, trying to start it as a lazy HAL.";
 
     std::thread([=] {

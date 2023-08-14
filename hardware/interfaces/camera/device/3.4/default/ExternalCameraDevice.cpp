@@ -15,13 +15,14 @@
  */
 
 #define LOG_TAG "ExtCamDev@3.4"
-//#define LOG_NDEBUG 0
+#define LOG_NDEBUG 0
 #include <log/log.h>
 
 #include <algorithm>
 #include <array>
 #include <regex>
 #include <linux/videodev2.h>
+#include <cutils/properties.h>
 #include "android-base/macros.h"
 #include "CameraMetadata.h"
 #include "../../3.2/default/include/convert.h"
@@ -39,8 +40,8 @@ namespace {
 // Other formats to consider in the future:
 // * V4L2_PIX_FMT_YVU420 (== YV12)
 // * V4L2_PIX_FMT_YVYU (YVYU: can be converted to YV12 or other YUV420_888 formats)
-const std::array<uint32_t, /*size*/ 2> kSupportedFourCCs{
-    {V4L2_PIX_FMT_MJPEG, V4L2_PIX_FMT_Z16}};  // double braces required in C++11
+const std::array<uint32_t, /*size*/ 5> kSupportedFourCCs{
+    {V4L2_PIX_FMT_MJPEG, V4L2_PIX_FMT_NV12, V4L2_PIX_FMT_H264, V4L2_PIX_FMT_YUYV, V4L2_PIX_FMT_Z16}};  // double braces required in C++11
 
 constexpr int MAX_RETRY = 5; // Allow retry v4l2 open failures a few times.
 constexpr int OPEN_RETRY_SLEEP_US = 100000; // 100ms * MAX_RETRY = 0.5 seconds
@@ -275,6 +276,9 @@ status_t ExternalCameraDevice::initAvailableCapabilities(
         switch (fmt.fourcc) {
             case V4L2_PIX_FMT_Z16: hasDepth = true; break;
             case V4L2_PIX_FMT_MJPEG: hasColor = true; break;
+            case V4L2_PIX_FMT_H264: hasColor = true; break;
+            case V4L2_PIX_FMT_YUYV: hasColor = true; break;
+            case V4L2_PIX_FMT_NV12: hasColor = true; break;
             default: ALOGW("%s: Unsupported format found", __FUNCTION__);
         }
     }
@@ -370,8 +374,20 @@ status_t ExternalCameraDevice::initDefaultCharsKeys(
     UPDATE(ANDROID_LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION,
            &opticalStabilizationMode, 1);
 
-    const uint8_t facing = ANDROID_LENS_FACING_EXTERNAL;
-    UPDATE(ANDROID_LENS_FACING, &facing, 1);
+    //const uint8_t facing = ANDROID_LENS_FACING_EXTERNAL;
+    //UPDATE(ANDROID_LENS_FACING, &facing, 1);
+    char uvc_facing[PROPERTY_VALUE_MAX];
+    property_get("persist.sys.uvc.facing", uvc_facing, "external");
+    if (strcmp(uvc_facing,"front")==0) {
+            const uint8_t facing = ANDROID_LENS_FACING_FRONT;
+            UPDATE(ANDROID_LENS_FACING, &facing, 1);
+    } else if (strcmp(uvc_facing,"back")==0) {
+            const uint8_t facing = ANDROID_LENS_FACING_BACK;
+            UPDATE(ANDROID_LENS_FACING, &facing, 1);
+    }else{
+            const uint8_t facing = ANDROID_LENS_FACING_EXTERNAL;
+            UPDATE(ANDROID_LENS_FACING, &facing, 1);
+    }
 
     // android.noiseReduction
     const uint8_t noiseReductionMode = ANDROID_NOISE_REDUCTION_MODE_OFF;
@@ -697,10 +713,13 @@ status_t ExternalCameraDevice::initOutputCharsKeys(
 
     bool hasDepth = false;
     bool hasColor = false;
+    bool hasColor_yuv = false;
+    bool hasColor_nv12 = false;
+    bool hasColor_h264 = false;
 
     // For V4L2_PIX_FMT_Z16
     std::array<int, /*size*/ 1> halDepthFormats{{HAL_PIXEL_FORMAT_Y16}};
-    // For V4L2_PIX_FMT_MJPEG
+    // For V4L2_PIX_FMT_MJPEG, V4L2_PIX_FMT_YUYV, V4L2_PIX_FMT_NV12
     std::array<int, /*size*/ 3> halFormats{{HAL_PIXEL_FORMAT_BLOB, HAL_PIXEL_FORMAT_YCbCr_420_888,
                                             HAL_PIXEL_FORMAT_IMPLEMENTATION_DEFINED}};
 
@@ -711,6 +730,15 @@ status_t ExternalCameraDevice::initOutputCharsKeys(
                 break;
             case V4L2_PIX_FMT_MJPEG:
                 hasColor = true;
+                break;
+            case V4L2_PIX_FMT_YUYV:
+                hasColor_yuv = true;
+                break;
+            case V4L2_PIX_FMT_NV12:
+                hasColor_nv12 = true;
+                break;
+            case V4L2_PIX_FMT_H264:
+                hasColor_h264 = true;
                 break;
             default:
                 ALOGW("%s: format %c%c%c%c is not supported!", __FUNCTION__,
@@ -728,6 +756,26 @@ status_t ExternalCameraDevice::initOutputCharsKeys(
     }
     if (hasColor) {
         initOutputCharskeysByFormat(metadata, V4L2_PIX_FMT_MJPEG, halFormats,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
+                ANDROID_SCALER_AVAILABLE_MIN_FRAME_DURATIONS,
+                ANDROID_SCALER_AVAILABLE_STALL_DURATIONS);
+    } else if (hasColor_yuv) {
+        initOutputCharskeysByFormat(metadata, V4L2_PIX_FMT_YUYV, halFormats,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
+                ANDROID_SCALER_AVAILABLE_MIN_FRAME_DURATIONS,
+                ANDROID_SCALER_AVAILABLE_STALL_DURATIONS);
+    }
+    if (hasColor_nv12) {
+        initOutputCharskeysByFormat(metadata, V4L2_PIX_FMT_NV12, halFormats,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT,
+                ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
+                ANDROID_SCALER_AVAILABLE_MIN_FRAME_DURATIONS,
+                ANDROID_SCALER_AVAILABLE_STALL_DURATIONS);
+    }
+    if (hasColor_h264) {
+        initOutputCharskeysByFormat(metadata, V4L2_PIX_FMT_H264, halFormats,
                 ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT,
                 ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
                 ANDROID_SCALER_AVAILABLE_MIN_FRAME_DURATIONS,
@@ -864,9 +912,21 @@ std::vector<SupportedV4L2Format> ExternalCameraDevice::getCandidateSupportedForm
     const Size& minStreamSize,
     bool depthEnabled) {
     std::vector<SupportedV4L2Format> outFmts;
-    struct v4l2_fmtdesc fmtdesc {
-        .index = 0,
-        .type = V4L2_BUF_TYPE_VIDEO_CAPTURE};
+
+    // VIDIOC_QUERYCAP get Capability
+     struct v4l2_capability capability;
+    int ret_query = ioctl(fd, VIDIOC_QUERYCAP, &capability);
+    if (ret_query < 0) {
+        ALOGE("%s v4l2 QUERYCAP %s failed: %s", __FUNCTION__, strerror(errno));
+    }
+
+    struct v4l2_fmtdesc fmtdesc{};
+    fmtdesc.index = 0;
+    if (capability.device_caps & V4L2_CAP_VIDEO_CAPTURE_MPLANE)
+        fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    else
+        fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
     int ret = 0;
     while (ret == 0) {
         ret = TEMP_FAILURE_RETRY(ioctl(fd, VIDIOC_ENUM_FMT, &fmtdesc));

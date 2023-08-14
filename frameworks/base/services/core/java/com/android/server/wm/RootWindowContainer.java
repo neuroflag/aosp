@@ -1148,9 +1148,9 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
                 displayHasContent = true;
             } else if (displayContent != null &&
                     (!mObscureApplicationContentOnSecondaryDisplays
-                            || (obscured && type == TYPE_KEYGUARD_DIALOG))) {
+                            /*|| (obscured && type == TYPE_KEYGUARD_DIALOG)*/)) {
                 // Allow full screen keyguard presentation dialogs to be seen.
-                displayHasContent = true;
+                displayHasContent = !(obscured && type == TYPE_KEYGUARD_DIALOG);
             }
             if ((privateflags & PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE) != 0) {
                 mSustainedPerformanceModeCurrent = true;
@@ -3299,6 +3299,8 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     boolean allResumedActivitiesIdle() {
+        ActivityRecord focusedActivity = null;
+        int mode = 0;
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
             // TODO(b/117135575): Check resumed activities on all visible stacks.
             final DisplayContent display = getChildAt(displayNdx);
@@ -3314,6 +3316,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
                 continue;
             }
             final ActivityRecord resumedActivity = stack.getResumedActivity();
+            focusedActivity = stack.getResumedActivity();
             if (resumedActivity == null || !resumedActivity.idle) {
                 if (DEBUG_STATES) {
                     Slog.d(TAG_STATES, "allResumedActivitiesIdle: stack="
@@ -3322,8 +3325,23 @@ class RootWindowContainer extends WindowContainer<DisplayContent>
                 return false;
             }
         }
-        // Send launch end powerhint when idle
-        sendPowerHintForLaunchEndIfNeeded();
+        if (focusedActivity != null) {
+            try {
+                mode = AppGlobals.getPackageManager().getPackagePerformanceMode(
+                    focusedActivity.mActivityComponent.toString());
+            } catch (RemoteException e) {
+            }
+            Slog.v(TAG_TASKS, "getPackagePerformanceMode -- "
+                + focusedActivity.mActivityComponent.toString()
+                + " -- " + focusedActivity.packageName
+                + " -- mode=" + mode);
+        }
+        if (mode == 0) {
+            // Send launch end powerhint when idle
+            sendPowerHintForLaunchEndIfNeeded();
+        } else {
+            mPowerHintSent = false;
+        }
         return true;
     }
 

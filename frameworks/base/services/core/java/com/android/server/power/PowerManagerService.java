@@ -2349,6 +2349,11 @@ public final class PowerManagerService extends SystemService
                     nextTimeout = Math.min(nextTimeout, nextProfileTimeout);
                 }
 
+                if (Integer.MAX_VALUE == screenOffTimeout) {
+                    mUserActivitySummary = USER_ACTIVITY_SCREEN_BRIGHT;
+                    //Slog.d(TAG, "set mUserActivitySummary USER_ACTIVITY_SCREEN_BRIGHT never sleep " + nextTimeout);
+                }
+
                 if (mUserActivitySummary != 0 && nextTimeout >= 0) {
                     scheduleUserInactivityTimeout(nextTimeout);
                 }

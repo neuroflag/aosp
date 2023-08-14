@@ -126,7 +126,8 @@ class TaskSnapshotController {
         mLoader = new TaskSnapshotLoader(mPersister);
         mCache = new TaskSnapshotCache(mService, mLoader);
         mIsRunningOnTv = mService.mContext.getPackageManager().hasSystemFeature(
-                PackageManager.FEATURE_LEANBACK);
+                PackageManager.FEATURE_LEANBACK)
+                || mService.mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION);
         mIsRunningOnIoT = mService.mContext.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_EMBEDDED);
         mIsRunningOnWear = mService.mContext.getPackageManager().hasSystemFeature(

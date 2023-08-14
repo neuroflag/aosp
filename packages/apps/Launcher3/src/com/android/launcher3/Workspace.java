@@ -506,18 +506,18 @@ public class Workspace extends PagedView<WorkspacePageIndicator>
         // Add the first page
         CellLayout firstPage = insertNewWorkspaceScreen(Workspace.FIRST_SCREEN_ID, 0);
         // Always add a QSB on the first screen.
-        if (qsb == null) {
-            // In transposed layout, we add the QSB in the Grid. As workspace does not touch the
-            // edges, we do not need a full width QSB.
-            qsb = LayoutInflater.from(getContext())
-                    .inflate(R.layout.search_container_workspace, firstPage, false);
-        }
+        // if (qsb == null) {
+        //     // In transposed layout, we add the QSB in the Grid. As workspace does not touch the
+        //     // edges, we do not need a full width QSB.
+        //     qsb = LayoutInflater.from(getContext())
+        //             .inflate(R.layout.search_container_workspace, firstPage, false);
+        // }
 
-        CellLayout.LayoutParams lp = new CellLayout.LayoutParams(0, 0, firstPage.getCountX(), 1);
-        lp.canReorder = false;
-        if (!firstPage.addViewToCellLayout(qsb, 0, R.id.search_container_workspace, lp, true)) {
-            Log.e(TAG, "Failed to add to item at (0, 0) to CellLayout");
-        }
+        // CellLayout.LayoutParams lp = new CellLayout.LayoutParams(0, 0, firstPage.getCountX(), 1);
+        // lp.canReorder = false;
+        // if (!firstPage.addViewToCellLayout(qsb, 0, R.id.search_container_workspace, lp, true)) {
+        //     Log.e(TAG, "Failed to add to item at (0, 0) to CellLayout");
+        // }
     }
 
     public void removeAllWorkspaceScreens() {
@@ -1931,12 +1931,26 @@ public class Workspace extends PagedView<WorkspacePageIndicator>
         }
     }
 
+
     public void onNoCellFound(View dropTargetLayout) {
-        int strId = mLauncher.isHotseatLayout(dropTargetLayout)
-                ? R.string.hotseat_out_of_space : R.string.out_of_space;
-        Toast.makeText(mLauncher, mLauncher.getString(strId), Toast.LENGTH_SHORT).show();
+        if (mLauncher.isHotseatLayout(dropTargetLayout)) {
+            Hotseat hotseat = mLauncher.getHotseat();
+            boolean droppedOnAllAppsIcon = !FeatureFlags.NO_ALL_APPS_ICON
+                    && mTargetCell != null && !mLauncher.getDeviceProfile().inv.isAllAppsButtonRank(
+                    hotseat.getOrderInHotseat(mTargetCell[0], mTargetCell[1]));
+            if (!droppedOnAllAppsIcon) {
+                // Only show message when hotseat is full and drop target was not AllApps button
+                showOutOfSpaceMessage(true);
+            }
+        } else {
+            showOutOfSpaceMessage(false);
+        }
     }
 
+    private void showOutOfSpaceMessage(boolean isHotseatLayout) {
+        int strId = (isHotseatLayout ? R.string.hotseat_out_of_space : R.string.out_of_space);
+        Toast.makeText(mLauncher, mLauncher.getString(strId), Toast.LENGTH_SHORT).show();
+    }
     /**
      * Computes the area relative to dragLayer which is used to display a page.
      */

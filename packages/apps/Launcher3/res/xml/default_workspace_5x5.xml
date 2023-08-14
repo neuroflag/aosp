@@ -23,9 +23,8 @@
         launcher:screen="0"
         launcher:x="0"
         launcher:y="0" >
-        <favorite launcher:uri="#Intent;action=android.intent.action.DIAL;end" />
-        <favorite launcher:uri="tel:123" />
-        <favorite launcher:uri="#Intent;action=android.intent.action.CALL_BUTTON;end" />
+    <favorite
+            launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" />
     </resolve>
 
     <resolve
@@ -33,20 +32,8 @@
         launcher:screen="1"
         launcher:x="1"
         launcher:y="0" >
-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_MESSAGING;end" />
-        <favorite launcher:uri="sms:" />
-        <favorite launcher:uri="smsto:" />
-        <favorite launcher:uri="mms:" />
-        <favorite launcher:uri="mmsto:" />
-    </resolve>
-
-    <resolve
-        launcher:container="-101"
-        launcher:screen="2"
-        launcher:x="2"
-        launcher:y="0" >
-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_MAPS;end" />
-        <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_MUSIC;end" />
+    <favorite
+            launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;launchFlags=0x10200000;component=android.rk.RockVideoPlayer/.RockVideoPlayer;end" />
     </resolve>
 
     <resolve
@@ -54,9 +41,8 @@
         launcher:screen="3"
         launcher:x="3"
         launcher:y="0" >
-        <favorite
-            launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_BROWSER;end" />
-        <favorite launcher:uri="http://www.example.com/" />
+    <favorite
+            launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;launchFlags=0x10200000;component=com.android.rk/.RockExplorer;end" />
     </resolve>
 
     <resolve
@@ -64,8 +50,8 @@
         launcher:screen="4"
         launcher:x="4"
         launcher:y="0" >
-        <favorite launcher:uri="#Intent;action=android.media.action.STILL_IMAGE_CAMERA;end" />
-        <favorite launcher:uri="#Intent;action=android.intent.action.CAMERA_BUTTON;end" />
+    <favorite 
+         launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;launchFlags=0x10200000;component=com.android.settings/.Settings;end" />
     </resolve>
 
     <!-- Bottom row -->
@@ -75,15 +61,6 @@
         launcher:y="-1" >
 	    <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_EMAIL;end" />
 	    <favorite launcher:uri="mailto:" />
-
-    </resolve>
-
-    <resolve
-        launcher:screen="0"
-        launcher:x="1"
-        launcher:y="-1" >
-	    <favorite launcher:uri="#Intent;action=android.intent.action.MAIN;category=android.intent.category.APP_GALLERY;end" />
-	    <favorite launcher:uri="#Intent;type=images/*;end" />
 
     </resolve>
 

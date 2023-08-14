@@ -23,6 +23,12 @@
 #include <string>
 #include <vector>
 
+//For multidevice  boot
+#define PCIE_3568_NODE  "fe280000" 
+#define PCIE_3566_NODE  "fe260000"
+#define REAL_PCIE_3568_PATH "3c0800000"
+#define REAL_PCIE_3566_PATH "3c0000000"
+
 std::string fs_mgr_get_slot_suffix();
 std::string fs_mgr_get_other_slot_suffix();
 
@@ -115,7 +121,13 @@ std::vector<FstabEntry*> GetEntriesForMountPoint(Fstab* fstab, const std::string
 void TransformFstabForDsu(Fstab* fstab, const std::vector<std::string>& dsu_partitions);
 
 std::set<std::string> GetBootDevices();
-
+bool GetBootTypeMultiDevice();
+std::string GetBootDevicesNode();
+std::string GetAndroidBootStoragemedia();
+bool GetBootTypeVirtualDisk();
+bool GetVirtualDiskInfo(std::string* virtual_offset,std::string* virtual_size);
+bool GetBootTypeVirtualShareDisk();
+bool GetVirtualShareDiskInfo(std::string* share_virtual_offset,std::string* share_virtual_size);
 // Return the name of the dm-verity device for the given fstab entry. This does
 // not check whether the device is valid or exists; it merely returns the
 // expected name.

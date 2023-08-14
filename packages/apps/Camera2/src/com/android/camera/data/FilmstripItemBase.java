@@ -70,7 +70,10 @@ public abstract class FilmstripItemBase<T extends FilmstripItemData> implements 
 
     @Override
     public boolean delete() {
-        File fileToDelete = new File(mData.getFilePath());
+        String path = mData.getFilePath();
+        if (path.startsWith("/storage") && !path.startsWith(Storage.FLASH_DIR) && !(new File(Storage.EXTENAL_SD).canWrite()))
+            path = path.replaceFirst("/storage/" , "/mnt/media_rw/");
+        File fileToDelete = new File(path);
         boolean deletionSucceeded = fileToDelete.delete();
         deleteIfEmptyCameraSubDir(fileToDelete.getParentFile());
         return deletionSucceeded;

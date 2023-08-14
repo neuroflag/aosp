@@ -72,6 +72,30 @@ public class EthernetServiceImpl extends IEthernetManager.Stub {
                 == PackageManager.PERMISSION_GRANTED;
     }
 
+
+    @Override
+    public void setEthernetEnabled(String iface,boolean enable) {
+        Log.i(TAG,"setEthernetEnabled() : enable="+enable);
+        if ( enable ) {
+            mTracker.setInterfaceUp(iface);
+        } else {
+            mTracker.setInterfaceDown(iface); 
+        }
+    }
+
+    @Override
+    public boolean isEthernetInterfaceActive() {
+        //enforceChangePermission();
+        return mTracker.isEthernetInterfaceActive();
+    }
+
+    @Override
+    public int getEthernetConnectState() {
+        //enforceAccessPermission();
+        //return mTracker.mEthernetCurrentState;
+        return 0;
+    }
+
     public void start() {
         Log.i(TAG, "Starting Ethernet service");
 
@@ -137,6 +161,50 @@ public class EthernetServiceImpl extends IEthernetManager.Stub {
         }
 
         return mTracker.isTrackingInterface(iface);
+    }
+
+    @Override
+    public String getIpAddress(String iface) {
+        enforceAccessPermission();
+
+        if (mTracker.isRestrictedInterface(iface)) {
+            enforceUseRestrictedNetworksPermission();
+        }
+
+        return mTracker.getIpAddress(iface);
+    }
+
+    @Override
+    public String getNetmask(String iface) {
+        enforceAccessPermission();
+
+        if (mTracker.isRestrictedInterface(iface)) {
+            enforceUseRestrictedNetworksPermission();
+        }
+
+        return mTracker.getNetmask(iface);
+    }
+
+    @Override
+    public String getGateway(String iface) {
+        enforceAccessPermission();
+
+        if (mTracker.isRestrictedInterface(iface)) {
+            enforceUseRestrictedNetworksPermission();
+        }
+
+        return mTracker.getGateway(iface);
+    }
+
+    @Override
+    public String getDns(String iface) {
+        enforceAccessPermission();
+
+        if (mTracker.isRestrictedInterface(iface)) {
+            enforceUseRestrictedNetworksPermission();
+        }
+
+        return mTracker.getDns(iface);
     }
 
     /**

@@ -20,7 +20,7 @@
 #include <android-base/logging.h>
 #include <android-base/strings.h>
 #include <fs_mgr.h>
-
+#include "virtual_dev_initializer.h"
 #include "block_dev_initializer.h"
 
 namespace android {
@@ -62,13 +62,14 @@ bool BlockDevInitializer::InitDeviceMapper() {
 }
 
 ListenerAction BlockDevInitializer::HandleUevent(const Uevent& uevent,
-                                                 std::set<std::string>* devices) {
+                                                 std::set<std::string>* devices) {    
+                                                
     // Ignore everything that is not a block device.
     if (uevent.subsystem != "block") {
         return ListenerAction::kContinue;
     }
-
     auto name = uevent.partition_name;
+    
     if (name.empty()) {
         size_t base_idx = uevent.path.rfind('/');
         if (base_idx == std::string::npos) {
@@ -76,13 +77,61 @@ ListenerAction BlockDevInitializer::HandleUevent(const Uevent& uevent,
         }
         name = uevent.path.substr(base_idx + 1);
     }
-
     auto iter = devices->find(name);
     if (iter == devices->end()) {
         return ListenerAction::kContinue;
     }
+     LOG(INFO) << __PRETTY_FUNCTION__ << ": found partition: " << name;
+    std::string::size_type platform_block_path = uevent.path.find("devices/platform/");
+    std::string::size_type virtual_block_path = uevent.path.find(VirtualUeventPath);
+    if(platform_block_path == std::string::npos && virtual_block_path == std::string::npos){
+        //LOG(INFO) << "Do other block mount"
+    }else if(android::fs_mgr::GetBootTypeVirtualDisk()){
+        std::string::size_type uevent_pos;
+        uevent_pos = uevent.path.find(VirtualUeventPath);
+        if(uevent_pos == std::string::npos)  {
+            return ListenerAction::kContinue;
+        }        
+    }else if(android::fs_mgr::GetBootTypeMultiDevice()){  
+        std::string boot_devices_storagenode = android::fs_mgr::GetBootDevicesNode();
+        std::string::size_type pcie_rk3568 = boot_devices_storagenode.find(PCIE_3568_NODE);
+        std::string::size_type pcie_rk3566 = boot_devices_storagenode.find(PCIE_3566_NODE);
+        std::string::size_type uevent_pos;
+        if(pcie_rk3568 != std::string::npos){
+            uevent_pos = uevent.path.find(REAL_PCIE_3568_PATH);
+            if(uevent_pos == std::string::npos){
+                return ListenerAction::kContinue;
+            }
+        }else if(pcie_rk3566 != std::string::npos){
+            uevent_pos = uevent.path.find(REAL_PCIE_3566_PATH);
+            if(uevent_pos == std::string::npos){
+                return ListenerAction::kContinue;
+            }
+        }else{
+            uevent_pos = uevent.path.find(boot_devices_storagenode);
+            if(uevent_pos == std::string::npos)  {
+                return ListenerAction::kContinue;
+            }
+        }
+    }else{
+        std::string android_boot_storagenode = android::fs_mgr::GetAndroidBootStoragemedia();
+        std::string::size_type android_boot_storagenode_emmc_pos = android_boot_storagenode.find("emmc");
+        std::string::size_type android_boot_storagenode_sd_pos = android_boot_storagenode.find("sd");
+        std::string::size_type uevent_pos;
+        if(android_boot_storagenode_emmc_pos != std::string::npos){
+            uevent_pos = uevent.path.find("fe310000");
+            if(uevent_pos == std::string::npos){
+                return ListenerAction::kContinue;
+            }
+        }else if(android_boot_storagenode_sd_pos != std::string::npos){
+            uevent_pos = uevent.path.find("fe2b0000");
+            if(uevent_pos == std::string::npos){
+                return ListenerAction::kContinue;
+            }
+        }
 
-    LOG(VERBOSE) << __PRETTY_FUNCTION__ << ": found partition: " << name;
+    }
+
 
     devices->erase(iter);
     device_handler_->HandleUevent(uevent);
@@ -94,7 +143,6 @@ bool BlockDevInitializer::InitDevices(std::set<std::string> devices) {
         return HandleUevent(uevent, &devices);
     };
     uevent_listener_.RegenerateUevents(uevent_callback);
-
     // UeventCallback() will remove found partitions from |devices|. So if it
     // isn't empty here, it means some partitions are not found.
     if (!devices.empty()) {
@@ -105,7 +153,6 @@ bool BlockDevInitializer::InitDevices(std::set<std::string> devices) {
         uevent_listener_.Poll(uevent_callback, 10s);
         LOG(INFO) << "Wait for partitions returned after " << t;
     }
-
     if (!devices.empty()) {
         LOG(ERROR) << __PRETTY_FUNCTION__ << ": partition(s) not found after polling timeout: "
                    << android::base::Join(devices, ", ");

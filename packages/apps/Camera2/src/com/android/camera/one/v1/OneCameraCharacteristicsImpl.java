@@ -16,6 +16,7 @@
 
 package com.android.camera.one.v1;
 
+import com.android.ex.camera2.portability.CameraCapabilities.WhiteBalance;
 import android.graphics.Rect;
 import android.hardware.Camera;
 
@@ -29,6 +30,7 @@ import com.android.camera.util.Size;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Describes a OneCamera device which is on top of camera1 API.
@@ -174,7 +176,7 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
         // Custom AF is only supported on the back camera for legacy devices.
         return getCameraDirection() == Facing.BACK;
     }
-
+	
     @Override
     public boolean isContinuousPictureAutoFocusSupported() {
         return getCameraDirection() == Facing.BACK;
@@ -184,5 +186,17 @@ public class OneCameraCharacteristicsImpl implements OneCameraCharacteristics {
     public boolean isAutoExposureSupported() {
         // Custom AE is only supported on the back camera for legacy devices.
         return getCameraDirection() == Facing.BACK;
+    }
+    
+    @Override
+    public boolean isWhiteBalanceSupported() {
+        // TODO Auto-generated method stub
+        return false;
+    }
+    
+    @Override
+    public Set<WhiteBalance> getSupportedWhiteBalances() {
+        // TODO Auto-generated method stub
+        return null;
     }
 }

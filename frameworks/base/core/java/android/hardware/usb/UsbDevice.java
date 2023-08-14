@@ -469,7 +469,15 @@ public class UsbDevice implements Parcelable {
          * @return The usb device
          */
         public UsbDevice build(@NonNull IUsbSerialReader serialReader) {
-            return new UsbDevice(mName, mVendorId, mProductId, mClass, mSubclass, mProtocol,
+            //Get more information at Firefly Redmine Feature #1565
+	    if(mVendorId == 0x31b1 ){
+		return new UsbDevice(mName, 0x1403, 0x3334, mClass, mSubclass, mProtocol,
+			mManufacturerName, "USB MICROPHONE", mVersion, mConfigurations, serialReader,
+			mHasAudioPlayback, mHasAudioCapture, mHasMidi,
+			mHasVideoPlayback, mHasVideoCapture);
+	    }
+
+	    return new UsbDevice(mName, mVendorId, mProductId, mClass, mSubclass, mProtocol,
                     mManufacturerName, mProductName, mVersion, mConfigurations, serialReader,
                     mHasAudioPlayback, mHasAudioCapture, mHasMidi,
                     mHasVideoPlayback, mHasVideoCapture);

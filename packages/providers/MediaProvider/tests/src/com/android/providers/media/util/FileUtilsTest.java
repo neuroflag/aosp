@@ -57,6 +57,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import android.content.ContentValues;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.provider.MediaStore.MediaColumns;
 
@@ -74,15 +75,29 @@ import org.junit.runner.RunWith;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Optional;
 
 @RunWith(AndroidJUnit4.class)
 public class FileUtilsTest {
+    /**
+     * To help avoid flaky tests, give ourselves a unique nonce to be used for
+     * all filesystem paths, so that we don't risk conflicting with previous
+     * test runs.
+     */
+    private static final String NONCE = String.valueOf(System.nanoTime());
+
+    private static final String TEST_DIRECTORY_NAME = "FileUtilsTestDirectory" + NONCE;
+    private static final String TEST_FILE_NAME = "FileUtilsTestFile" + NONCE;
+
     private File mTarget;
     private File mDcimTarget;
     private File mDeleteTarget;
+    private File mDownloadTarget;
+    private File mTestDownloadDir;
 
     @Before
     public void setUp() throws Exception {
@@ -93,11 +108,17 @@ public class FileUtilsTest {
         mDcimTarget.mkdirs();
 
         mDeleteTarget = mDcimTarget;
+
+        mDownloadTarget = new File(Environment.getExternalStorageDirectory(),
+                Environment.DIRECTORY_DOWNLOADS);
+        mTestDownloadDir = new File(mDownloadTarget, TEST_DIRECTORY_NAME);
+        mTestDownloadDir.mkdirs();
     }
 
     @After
     public void tearDown() throws Exception {
         FileUtils.deleteContents(mTarget);
+        FileUtils.deleteContents(mTestDownloadDir);
     }
 
     private void touch(String name, long age) throws Exception {
@@ -121,6 +142,17 @@ public class FileUtilsTest {
         // Verify empty writing deletes file
         FileUtils.writeString(file, Optional.empty());
         assertFalse(FileUtils.readString(file).isPresent());
+
+        // Verify reading from a file with more than 4096 chars
+        try (RandomAccessFile raf = new RandomAccessFile(file, "rw")) {
+            raf.setLength(4097);
+        }
+        assertEquals(Optional.empty(), FileUtils.readString(file));
+
+        // Verify reading from non existing file.
+        file.delete();
+        assertEquals(Optional.empty(), FileUtils.readString(file));
+
     }
 
     @Test
@@ -407,7 +439,25 @@ public class FileUtilsTest {
     }
 
     /**
-     * Verify that we generate unique filenames that look sane compared to other
+     * Verify that we generate unique filenames that meet the JEITA DCF
+     * specification when writing into directories like {@code DCIM}.
+     *
+     * See b/174120008 for context.
+     */
+    @Test
+    public void testBuildUniqueFile_DCF_strict_differentLocale() throws Exception {
+        Locale defaultLocale = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("ar", "SA"));
+            testBuildUniqueFile_DCF_strict();
+        }
+        finally {
+            Locale.setDefault(defaultLocale);
+        }
+    }
+
+    /**
+     * Verify that we generate unique filenames that look valid compared to other
      * {@code DCIM} filenames. These technically aren't part of the official
      * JEITA DCF specification.
      */
@@ -422,6 +472,24 @@ public class FileUtilsTest {
                 buildUniqueFile(mDcimTarget, "IMG_20190102_030405.jpg"));
         assertNameEquals("IMG_20190102_030405~3.jpg",
                 buildUniqueFile(mDcimTarget, "IMG_20190102_030405~2.jpg"));
+    }
+
+    /**
+     * Verify that we generate unique filenames that look valid compared to other
+     * {@code DCIM} filenames. These technically aren't part of the official
+     * JEITA DCF specification.
+     *
+     * See b/174120008 for context.
+     */
+    @Test
+    public void testBuildUniqueFile_DCF_relaxed_differentLocale() throws Exception {
+        Locale defaultLocale = Locale.getDefault();
+        try {
+            Locale.setDefault(new Locale("ar", "SA"));
+            testBuildUniqueFile_DCF_relaxed();
+        } finally {
+            Locale.setDefault(defaultLocale);
+        }
     }
 
     @Test
@@ -641,6 +709,71 @@ public class FileUtilsTest {
         FileUtils.computeDateExpires(values);
         assertTrue(values.containsKey(MediaColumns.DATE_EXPIRES));
         assertNull(values.get(MediaColumns.DATE_EXPIRES));
+    }
+
+    @Test
+    public void testGetTopLevelNoMedia_CurrentDir() throws Exception {
+        File dirInDownload = getNewDirInDownload("testGetTopLevelNoMedia_CurrentDir");
+        File nomedia = new File(dirInDownload, ".nomedia");
+        assertTrue(nomedia.createNewFile());
+
+        assertEquals(nomedia, FileUtils.getTopLevelNoMedia(new File(dirInDownload, "foo")));
+    }
+
+    @Test
+    public void testGetTopLevelNoMedia_TopDir() throws Exception {
+        File topDirInDownload = getNewDirInDownload("testGetTopLevelNoMedia_TopDir");
+        File topNomedia = new File(topDirInDownload, ".nomedia");
+        assertTrue(topNomedia.createNewFile());
+
+        File dirInTopDirInDownload = new File(topDirInDownload, "foo");
+        assertTrue(dirInTopDirInDownload.mkdirs());
+        File nomedia = new File(dirInTopDirInDownload, ".nomedia");
+        assertTrue(nomedia.createNewFile());
+
+        assertEquals(topNomedia,
+                FileUtils.getTopLevelNoMedia(new File(dirInTopDirInDownload, "foo")));
+    }
+
+    @Test
+    public void testGetTopLevelNoMedia_NoDir() throws Exception {
+        File topDirInDownload = getNewDirInDownload("testGetTopLevelNoMedia_NoDir");
+        File dirInTopDirInDownload = new File(topDirInDownload, "foo");
+        assertTrue(dirInTopDirInDownload.mkdirs());
+
+        assertEquals(null,
+                FileUtils.getTopLevelNoMedia(new File(dirInTopDirInDownload, "foo")));
+    }
+
+    @Test
+    public void testDirectoryDirty() throws Exception {
+        File dirInDownload = getNewDirInDownload("testDirectoryDirty");
+
+        // All directories are considered dirty, unless hidden
+        assertTrue(FileUtils.isDirectoryDirty(dirInDownload));
+
+        // Marking a directory as clean has no effect without a .nomedia file
+        FileUtils.setDirectoryDirty(dirInDownload, false);
+        assertTrue(FileUtils.isDirectoryDirty(dirInDownload));
+
+        // Creating an empty .nomedia file still keeps a directory dirty
+        File nomedia = new File(dirInDownload, ".nomedia");
+        assertTrue(nomedia.createNewFile());
+        assertTrue(FileUtils.isDirectoryDirty(dirInDownload));
+
+        // Marking as clean with a .nomedia file works
+        FileUtils.setDirectoryDirty(dirInDownload, false);
+        assertFalse(FileUtils.isDirectoryDirty(dirInDownload));
+
+        // Marking as dirty with a .nomedia file works
+        FileUtils.setDirectoryDirty(dirInDownload, true);
+        assertTrue(FileUtils.isDirectoryDirty(dirInDownload));
+    }
+
+    private File getNewDirInDownload(String name) {
+        File file = new File(mTestDownloadDir, name);
+        assertTrue(file.mkdir());
+        return file;
     }
 
     private static File touch(File dir, String name) throws IOException {

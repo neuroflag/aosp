@@ -238,7 +238,8 @@ public final class NotificationRecord {
         final Notification n = getSbn().getNotification();
 
         // No notification sounds on tv
-        if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+        if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+            || mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION)) {
             return null;
         }
 

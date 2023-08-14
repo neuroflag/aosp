@@ -199,7 +199,8 @@ public class MediaSessionService extends SystemService implements Monitor {
         mSettingsObserver = new SettingsObserver();
         mSettingsObserver.observe();
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(
-                PackageManager.FEATURE_LEANBACK);
+                PackageManager.FEATURE_LEANBACK)
+                || mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEVISION);
 
         updateUser();
 

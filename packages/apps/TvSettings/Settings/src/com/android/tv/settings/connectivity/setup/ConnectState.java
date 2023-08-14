@@ -139,6 +139,7 @@ public class ConnectState implements State {
                     .getSystemService(Context.WIFI_SERVICE));
             mHandler = new MessageHandler(this);
             mConnectivityListener.setWifiListener(this);
+            mUserChoiceInfo = ViewModelProviders.of(getActivity()).get(UserChoiceInfo.class);
         }
 
         @Override
@@ -202,7 +203,9 @@ public class ConnectState implements State {
                 if (wifiNetworkCapabilities != null) {
                     if (wifiNetworkCapabilities.hasCapability(
                             NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
-                        notifyListener(StateMachine.RESULT_SUCCESS);
+                        if (isNetworkConnected()) {
+                            notifyListener(StateMachine.RESULT_SUCCESS);
+                        }
                     } else if (wifiNetworkCapabilities.hasCapability(
                             NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL)) {
                         notifyListener(StateMachine.RESULT_CAPTIVE_PORTAL);

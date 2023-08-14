@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkState;
 
 import android.hardware.camera2.CameraAccessException;
 
+import com.android.camera.debug.Log;
 import com.android.camera.one.v2.camera2proxy.CameraCaptureSessionClosedException;
 
 import java.util.List;
@@ -36,6 +37,7 @@ public final class FrameServerImpl implements FrameServer {
     public class Session implements FrameServer.Session {
         private final Object mLock;
         private boolean mClosed;
+        private final Log.Tag TAG = new Log.Tag("FrameServerImpl");
 
         private Session() {
             mLock = new Object();
@@ -46,6 +48,7 @@ public final class FrameServerImpl implements FrameServer {
         public void submitRequest(List<Request> burstRequests, RequestType type)
                 throws CameraAccessException, InterruptedException,
                 CameraCaptureSessionClosedException, ResourceAcquisitionFailedException {
+            Log.d(TAG, "submitRequest type:" + type.name());
             synchronized (mLock) {
                 try {
                     if (mClosed) {

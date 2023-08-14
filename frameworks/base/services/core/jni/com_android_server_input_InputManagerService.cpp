@@ -41,6 +41,7 @@
 #include <utils/Trace.h>
 
 #include <binder/IServiceManager.h>
+#include <cutils/properties.h>
 
 #include <input/PointerController.h>
 #include <input/SpriteController.h>
@@ -62,6 +63,13 @@
 #include <nativehelper/ScopedPrimitiveArray.h>
 #include <nativehelper/ScopedUtfChars.h>
 
+#include <stddef.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <errno.h>
+#include <limits.h>
+#include <math.h>
+
 #include "com_android_server_power_PowerManagerService.h"
 #include "android_hardware_input_InputApplicationHandle.h"
 #include "android_hardware_input_InputWindowHandle.h"
@@ -81,6 +89,7 @@ namespace android {
 // The scaling factor is calculated as 2 ^ (speed * exponent),
 // where the speed ranges from -7 to + 7 and is supplied by the user.
 static const float POINTER_SPEED_EXPONENT = 1.0f / 4;
+static sp<PointerControllerInterface> mPointerController;
 
 static struct {
     jclass clazz;
@@ -233,6 +242,7 @@ public:
             jfloatArray matrixArr);
     virtual TouchAffineTransformation getTouchAffineTransformation(
             const std::string& inputDeviceDescriptor, int32_t surfaceRotation);
+    virtual int32_t notifyDisplayIdChanged();
 
     /* --- InputDispatcherPolicyInterface implementation --- */
 
@@ -949,6 +959,40 @@ TouchAffineTransformation NativeInputManager::getTouchAffineTransformation(
     env->DeleteLocalRef(cal);
 
     return transform;
+}
+
+int32_t NativeInputManager::notifyDisplayIdChanged() REQUIRES(mLock) {
+    sp<PointerController> controller = mLocked.pointerController.promote();
+    int32_t mDisplayId=controller->getDisplayId();
+    uint8_t physicalPortSize=0;
+    DisplayViewport mViewport=controller->getViewportLocked();
+    uint8_t mPhysicalPort=mViewport.physicalPort.value();
+    ALOGV("all viewports size=%d current viewport=%s ",(int32_t)mLocked.viewports.size(),mViewport.toString().c_str());
+    for (const DisplayViewport& v : mLocked.viewports) {
+        if (v.physicalPort!=std::nullopt) {
+           physicalPortSize++;
+        }
+    }
+    ALOGV("physical port size=%d",physicalPortSize);
+    if(physicalPortSize==1){
+       ALOGV("physicalPort size =1,return display id %d",mDisplayId);
+       return mDisplayId;
+    }
+    for (const DisplayViewport& v : mLocked.viewports) {
+       ALOGV("viewport=%s",v.toString().c_str());
+       if (v.physicalPort==std::nullopt || v.physicalPort.value()==mPhysicalPort || mViewport.displayId==v.displayId){
+            ALOGV("continue-----");
+            continue;
+       }
+       if(physicalPortSize==2||v.physicalPort.value()==(mViewport.physicalPort.value()+1)%physicalPortSize){
+            ALOGV("next viewport=%s",v.toString().c_str());
+            controller->setDisplayId(v.displayId);
+            controller->setDisplayViewport(v);
+            mDisplayId=v.displayId;
+            break ;
+       }
+    }
+    return mDisplayId; 
 }
 
 bool NativeInputManager::filterInputEvent(const InputEvent* inputEvent, uint32_t policyFlags) {
@@ -1749,6 +1793,67 @@ static void nativeSetMotionClassifierEnabled(JNIEnv* /* env */, jclass /* clazz 
     im->setMotionClassifierEnabled(enabled);
 }
 
+static void android_server_InputManager_nativedispatchMouse(JNIEnv* env,
+              jclass clazz,jfloat x,jfloat y,jint w,jint h,jlong ptr) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+
+    int mID;
+    float mx, my;
+    float screenWidth,screenHeight;
+    char *mgetID=new char[PROPERTY_VALUE_MAX];
+    const char *mkeyMouseState;
+    screenWidth=(float)w;
+    screenHeight=(float)h;
+
+    property_get("sys.ID.mID",mgetID,0);
+    mID=atoi(mgetID);
+
+    mPointerController=im->obtainPointerController(mID);
+
+    //start to dispatchMouse
+    mPointerController->setPresentation(
+                    PointerControllerInterface::PRESENTATION_POINTER);
+    mPointerController->move(x,y);
+    mPointerController->unfade(PointerControllerInterface::TRANSITION_IMMEDIATE);
+    mPointerController->getPosition(&mx, &my);
+
+    //if((mx<=0)||((mx>=(screenWidth-10.0f))||(my<=0)||(my>=(screenHeight-10.0f)))
+    //	x=0;y=0;
+
+    if (mx == 0) {
+           mkeyMouseState="left";
+    } else if (mx>=(screenWidth-5.0f)) {
+           mkeyMouseState="right";
+    } else if (my == 0) {
+           mkeyMouseState="up";
+    } else if (my >= (screenHeight-5.0f)) {
+           mkeyMouseState="down";
+    } else {
+           mkeyMouseState="Non-boundary";
+    }
+
+    property_set("sys.keymouselimitstate",mkeyMouseState);
+}
+
+static void android_server_InputManager_nativedispatchMouseByCd(JNIEnv* env,
+jclass clazz,jfloat x,jfloat y,jlong ptr) {
+   NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+   int mID;
+   char *mgetID=new char[PROPERTY_VALUE_MAX];
+
+   property_get("sys.ID.mID",mgetID,0);
+   mID=atoi(mgetID);
+
+   mPointerController=im->obtainPointerController(mID);
+
+   //start to dispatchMouse
+    mPointerController->setPresentation(
+                    PointerControllerInterface::PRESENTATION_POINTER);
+    mPointerController->setPosition(x,y);
+    mPointerController->unfade(PointerControllerInterface::TRANSITION_IMMEDIATE);
+   //mPointerController->fade(PointerControllerInterface::TRANSITION_IMMEDIATE);
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod gInputManagerMethods[] = {
@@ -1807,6 +1912,8 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"nativeCanDispatchToDisplay", "(JII)Z", (void*)nativeCanDispatchToDisplay},
         {"nativeNotifyPortAssociationsChanged", "(J)V", (void*)nativeNotifyPortAssociationsChanged},
         {"nativeSetMotionClassifierEnabled", "(JZ)V", (void*)nativeSetMotionClassifierEnabled},
+        { "nativedispatchMouse", "(FFIIJ)V", (void*) android_server_InputManager_nativedispatchMouse },
+        { "nativedispatchMouseByCd", "(FFJ)V", (void*) android_server_InputManager_nativedispatchMouseByCd },
 };
 
 #define FIND_CLASS(var, className) \
