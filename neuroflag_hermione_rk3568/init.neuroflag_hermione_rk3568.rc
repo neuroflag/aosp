@@ -1,0 +1,3 @@
+on zygote-start
+    # For UART
+    chmod 0666 /dev/ttyS9
