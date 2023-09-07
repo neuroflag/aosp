@@ -33,5 +33,7 @@ BOARD_HAVE_DONGLE := true
 BOARD_HAS_GPS := false
 
 PRODUCT_COPY_FILES += device/rockchip/rk356x/rk3568_firefly_itx_3568q/idc/ILITEK_ILITEK-TP.idc:system/usr/idc/ILITEK_ILITEK-TP.idc
+PRODUCT_COPY_FILES += device/neuroflag/apps/ron-driver/prebuilt/arm64-v8a/ron-driver-server:vendor/bin/ron-driver-server
+PRODUCT_COPY_FILES += device/neuroflag/apps/ron-driver/prebuilt/arm64-v8a/ron-driver-client:vendor/bin/ron-driver-client
 PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/init.neuroflag_hermione_rk3568.rc:vendor/etc/init/init.neuroflag_hermione_rk3568.rc
 PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/ueventd.rc:odm/ueventd.rc
