@@ -28,6 +28,7 @@ PRODUCT_PROPERTY_OVERRIDES += persist.usb.show=1
 PRODUCT_PROPERTY_OVERRIDES += ro.net.eth_primary=eth1
 PRODUCT_PROPERTY_OVERRIDES += ro.net.eth_aux=eth0
 PRODUCT_PROPERTY_OVERRIDES += persist.dhcpserver.enable=1
+PRODUCT_PROPERTY_OVERRIDES += rondriver.enabled=1
 
 BOARD_HAVE_DONGLE := true
 BOARD_HAS_GPS := false
@@ -37,3 +38,5 @@ PRODUCT_COPY_FILES += device/neuroflag/apps/ron-driver/prebuilt/arm64-v8a/ron-dr
 PRODUCT_COPY_FILES += device/neuroflag/apps/ron-driver/prebuilt/arm64-v8a/ron-driver-client:vendor/bin/ron-driver-client
 PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/init.neuroflag_hermione_rk3568.rc:vendor/etc/init/init.neuroflag_hermione_rk3568.rc
 PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/ueventd.rc:odm/ueventd.rc
+
+BOARD_SEPOLICY_DIRS += device/neuroflag/neuroflag_hermione_rk3568/sepolicy

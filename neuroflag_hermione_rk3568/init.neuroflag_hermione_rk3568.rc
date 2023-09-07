@@ -1,3 +1,16 @@
 on zygote-start
     # For UART
     chmod 0666 /dev/ttyS9
+
+service rondriver /vendor/bin/ron-driver-server
+    user system
+    group system
+    seclabel u:r:su:s0
+    stdio_to_kmsg
+    setenv RON_DRIVER_DATA_DIR /data/data/com.neuroflag.hermione/rondata
+
+on property:rondriver.enabled=1 
+    start rondriver
+
+on property:rondriver.enabled=0
+    stop rondriver
