@@ -1,0 +1,18 @@
+# for usb
+/dev/ttyUSB*              0660   system     system
+/dev/ttyACM*              0660   system     system
+/dev/cdc-wdm*             0660   system     system
+/dev/qcqmi*               0660   system     system
+/dev/cdc-acm*             0660   system     system
+
+# for usb
+/dev/ttyUSB0              0660   system     system
+/dev/ttyUSB1              0660   system     system
+/dev/ttyUSB2              0660   system     system
+/dev/ttyUSB3              0660   system     system
+/dev/ttyUSB4              0660   system     system
+/dev/ttyUSB5              0660   system     system
+/dev/ttyUSB6              0660   system     system
+/dev/ttyUSB7              0660   system     system
+/dev/ttyUSB8              0660   system     system
+/dev/ttyUSB9              0660   system     system

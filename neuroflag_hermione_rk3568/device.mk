@@ -34,3 +34,4 @@ BOARD_HAS_GPS := false
 
 PRODUCT_COPY_FILES += device/rockchip/rk356x/rk3568_firefly_itx_3568q/idc/ILITEK_ILITEK-TP.idc:system/usr/idc/ILITEK_ILITEK-TP.idc
 PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/init.neuroflag_hermione_rk3568.rc:vendor/etc/init/init.neuroflag_hermione_rk3568.rc
+PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/ueventd.rc:odm/ueventd.rc
