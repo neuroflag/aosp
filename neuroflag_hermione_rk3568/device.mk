@@ -39,4 +39,6 @@ PRODUCT_COPY_FILES += device/neuroflag/apps/ron-driver/prebuilt/arm64-v8a/ron-dr
 PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/init.neuroflag_hermione_rk3568.rc:vendor/etc/init/init.neuroflag_hermione_rk3568.rc
 PRODUCT_COPY_FILES += device/neuroflag/neuroflag_hermione_rk3568/ueventd.rc:odm/ueventd.rc
 
+PRODUCT_PACKAGES += NeuroflagHermione
+
 BOARD_SEPOLICY_DIRS += device/neuroflag/neuroflag_hermione_rk3568/sepolicy
