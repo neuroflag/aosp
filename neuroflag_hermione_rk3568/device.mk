@@ -19,8 +19,8 @@ PRODUCT_MODEL := Hermione-RK3568
 PRODUCT_MANUFACTURER := Neuroflag
 PRODUCT_AAPT_PREF_CONFIG := mdpi
 
-PRODUCT_PROPERTY_OVERRIDES += vendor.hwc.device.primary=DSI
-PRODUCT_PROPERTY_OVERRIDES += vendor.hwc.device.extend=eDP,HDMI-A
+PRODUCT_PROPERTY_OVERRIDES += vendor.hwc.device.primary=LVDS
+PRODUCT_PROPERTY_OVERRIDES += vendor.hwc.device.extend=HDMI-A
 PRODUCT_PROPERTY_OVERRIDES += ro.sf.lcd_density=160
 PRODUCT_PROPERTY_OVERRIDES += ro.wifi.sleep.power.down=true
 PRODUCT_PROPERTY_OVERRIDES += persist.usb.show=1
