@@ -53,7 +53,7 @@ static const char* kSgdiskToken = " \t\n";
 
 static const char* kSysfsLoopMaxMinors = "/sys/module/loop/parameters/max_part";
 static const char* kSysfsMmcMaxMinorsDeprecated = "/sys/module/mmcblk/parameters/perdev_minors";
-static const char* kSysfsMmcMaxMinors = "/sys/module/mmc_block/parameters/perdev_minors";
+static const char* kSysfsMmcMaxMinors = "/sys/module/mmcblk/parameters/perdev_minors";
 
 static const unsigned int kMajorBlockLoop = 7;
 static const unsigned int kMajorBlockScsiA = 8;
@@ -73,6 +73,7 @@ static const unsigned int kMajorBlockScsiN = 133;
 static const unsigned int kMajorBlockScsiO = 134;
 static const unsigned int kMajorBlockScsiP = 135;
 static const unsigned int kMajorBlockMmc = 179;
+static const unsigned int kMajorBlockPCIENVME = 259;
 static const unsigned int kMajorBlockDynamicMin = 234;
 static const unsigned int kMajorBlockDynamicMax = 512;
 
@@ -292,6 +293,17 @@ status_t Disk::readMetadata() {
             }
             break;
         }
+        case kMajorBlockPCIENVME: {
+            std::string path(mSysPath + "/device/device/vendor");
+            std::string tmp;
+            if (!ReadFileToString(path, &tmp)) {
+                PLOG(WARNING) << "Failed to read vendor from " << path;
+                return -errno;
+            }
+            tmp = android::base::Trim(tmp);
+            mLabel = tmp;
+            break;
+        }
         default: {
             if (IsVirtioBlkDevice(majorId)) {
                 LOG(DEBUG) << "Recognized experimental block major ID " << majorId
@@ -349,74 +361,65 @@ status_t Disk::readPartitions() {
 
     Table table = Table::kUnknown;
     bool foundParts = false;
+    bool validParts = false;
     for (const auto& line : output) {
-        auto split = android::base::Split(line, kSgdiskToken);
-        auto it = split.begin();
-        if (it == split.end()) continue;
-
-        if (*it == "DISK") {
-            if (++it == split.end()) continue;
-            if (*it == "mbr") {
+        char* cline = (char*) line.c_str();
+        char* token = strtok(cline, kSgdiskToken);
+        if (token == nullptr) continue;
+        if (!strcmp(token, "DISK")) {
+            const char* type = strtok(nullptr, kSgdiskToken);
+            if (!strcmp(type, "mbr")) {
                 table = Table::kMbr;
-            } else if (*it == "gpt") {
+            } else if (!strcmp(type, "gpt")) {
                 table = Table::kGpt;
-            } else {
-                LOG(WARNING) << "Invalid partition table " << *it;
-                continue;
             }
-        } else if (*it == "PART") {
+        } else if (!strcmp(token, "PART")) {
             foundParts = true;
 
-            if (++it == split.end()) continue;
-            int i = 0;
-            if (!android::base::ParseInt(*it, &i, 1, maxMinors)) {
-                LOG(WARNING) << "Invalid partition number " << *it;
+            int i = strtol(strtok(nullptr, kSgdiskToken), nullptr, 10);
+            if (i <= 0 || i > maxMinors) {
+                LOG(WARNING) << mId << " is ignoring partition " << i
+                            << " beyond max supported devices";
                 continue;
             }
             dev_t partDevice = makedev(major(mDevice), minor(mDevice) + i);
-
+            LOG(WARNING) << "readPartitions    is  " ;
             if (table == Table::kMbr) {
-                if (++it == split.end()) continue;
-                int type = 0;
-                if (!android::base::ParseInt("0x" + *it, &type)) {
-                    LOG(WARNING) << "Invalid partition type " << *it;
-                    continue;
-                }
-
-                switch (type) {
+                const char* type = strtok(nullptr, kSgdiskToken);
+                LOG(INFO)<<"type =" << type;
+                switch (strtol(type, nullptr, 16)) {
                     case 0x06:  // FAT16
                     case 0x07:  // HPFS/NTFS/exFAT
                     case 0x0b:  // W95 FAT32 (LBA)
                     case 0x0c:  // W95 FAT32 (LBA)
                     case 0x0e:  // W95 FAT16 (LBA)
+                    case 0x83:  // W95 FAT16 (LBA)
+                        validParts = true;
                         createPublicVolume(partDevice);
                         break;
                 }
             } else if (table == Table::kGpt) {
-                if (++it == split.end()) continue;
-                auto typeGuid = *it;
-                if (++it == split.end()) continue;
-                auto partGuid = *it;
-
-                if (android::base::EqualsIgnoreCase(typeGuid, kGptBasicData)) {
+                const char* typeGuid = strtok(nullptr, kSgdiskToken);
+                const char* partGuid = strtok(nullptr, kSgdiskToken);
+                validParts = true;
+                PLOG(WARNING) << "table == Table::kGpt" << typeGuid ;
+                if (!strcasecmp(typeGuid, kGptBasicData)) {
+                    LOG(INFO)<<"strcasecmp(typeGuid, kGptBasicData)" ;
                     createPublicVolume(partDevice);
-                } else if (android::base::EqualsIgnoreCase(typeGuid, kGptAndroidExpand)) {
+                } else if (!strcasecmp(typeGuid, kGptAndroidExpand)) {
                     createPrivateVolume(partDevice, partGuid);
                 }
             }
         }
-    }
-
-    // Ugly last ditch effort, treat entire disk as partition
-    if (table == Table::kUnknown || !foundParts) {
-        LOG(WARNING) << mId << " has unknown partition table; trying entire device";
-
-        std::string fsType;
-        std::string unused;
-        if (ReadMetadataUntrusted(mDevPath, &fsType, &unused, &unused) == OK) {
-            createPublicVolume(mDevice);
-        } else {
-            LOG(WARNING) << mId << " failed to identify, giving up";
+        if (table == Table::kUnknown || !foundParts ||!validParts) {
+            LOG(WARNING) << mId << " has unknown partition table; trying entire device";
+            std::string fsType;
+            std::string unused;
+            if (ReadMetadataUntrusted(mDevPath,  &fsType,  &unused,  &unused) == OK) {
+                createPublicVolume(mDevice);
+            } else {
+                LOG(WARNING) << mId << " failed to identify, giving up";
+            }
         }
     }
 
@@ -592,6 +595,14 @@ int Disk::getMaxMinors() {
             std::string tmp;
             if (!ReadFileToString(kSysfsMmcMaxMinors, &tmp) &&
                 !ReadFileToString(kSysfsMmcMaxMinorsDeprecated, &tmp)) {
+                LOG(ERROR) << "Failed to read max minors";
+                return -errno;
+            }
+            return std::stoi(tmp);
+        }
+        case kMajorBlockPCIENVME: {
+            std::string tmp;
+            if (!ReadFileToString(kSysfsMmcMaxMinors, &tmp)) {
                 LOG(ERROR) << "Failed to read max minors";
                 return -errno;
             }

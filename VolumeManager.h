@@ -39,6 +39,12 @@
 #include "model/Disk.h"
 #include "model/VolumeBase.h"
 
+//For Firefly Multidevices Boot
+#include <fs_mgr.h>
+#include <linux/loop.h>
+#include <linux/fs.h>
+
+
 class VolumeManager {
   private:
     static VolumeManager* sInstance;

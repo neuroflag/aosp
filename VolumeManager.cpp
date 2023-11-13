@@ -36,6 +36,7 @@
 #include <linux/kdev_t.h>
 
 #include <ApexProperties.sysprop.h>
+#include <android-base/file.h>
 #include <android-base/logging.h>
 #include <android-base/parseint.h>
 #include <android-base/properties.h>
@@ -72,6 +73,7 @@
 #include "model/StubVolume.h"
 
 using android::OK;
+using android::base::ReadFileToString;
 using android::base::GetBoolProperty;
 using android::base::StartsWith;
 using android::base::StringAppendF;
@@ -105,6 +107,7 @@ static const std::string kEmptyString("");
 static const unsigned int kSizeVirtualDisk = 536870912;
 
 static const unsigned int kMajorBlockMmc = 179;
+static const unsigned int kMajorBlockPcie = 259;
 
 using ScanProcCallback = bool(*)(uid_t uid, pid_t pid, int nsFd, const char* name, void* params);
 
@@ -216,16 +219,46 @@ void VolumeManager::handleBlockEvent(NetlinkEvent* evt) {
         LOG(DEBUG) << "handleBlockEvent with action " << (int)evt->getAction();
         evt->dump();
     }
-
+    
     std::string eventPath(evt->findParam("DEVPATH") ? evt->findParam("DEVPATH") : "");
     std::string devType(evt->findParam("DEVTYPE") ? evt->findParam("DEVTYPE") : "");
 
     if (devType != "disk") return;
 
+
+    std::string normal_boot_storagemedia = android::fs_mgr::GetAndroidBootStoragemedia();
+    std::string::size_type boot_pos = normal_boot_storagemedia.find("sd");
+    if(boot_pos != std::string::npos){
+        boot_pos = eventPath.find("devices/platform/fe2b0000.dwmmc");
+        if(boot_pos != std::string::npos){
+            return;
+        }
+    }
+
+    std::string boot_devices_storagenode = android::fs_mgr::GetBootDevicesNode();
+    std::string::size_type pcie_rk3568 = boot_devices_storagenode.find(PCIE_3568_NODE);
+    std::string::size_type pcie_rk3566 = boot_devices_storagenode.find(PCIE_3566_NODE);
+    std::string::size_type uevent_pos;
+    if(pcie_rk3568 != std::string::npos){
+        uevent_pos = eventPath.find(REAL_PCIE_3568_PATH);
+        if(uevent_pos != std::string::npos){
+            return;
+        }
+    }else if(pcie_rk3566 != std::string::npos){
+        uevent_pos = eventPath.find(REAL_PCIE_3566_PATH);
+        if(uevent_pos != std::string::npos){
+            return;
+        }
+    }else{
+        uevent_pos = eventPath.find(boot_devices_storagenode);
+        if(uevent_pos != std::string::npos)  {
+            return;
+        }
+    }
+
     int major = std::stoi(evt->findParam("MAJOR"));
     int minor = std::stoi(evt->findParam("MINOR"));
     dev_t device = makedev(major, minor);
-
     switch (evt->getAction()) {
         case NetlinkEvent::Action::kAdd: {
             for (const auto& source : mDiskSources) {
@@ -234,12 +267,33 @@ void VolumeManager::handleBlockEvent(NetlinkEvent* evt) {
                     // specific to virtual platforms; see Utils.cpp for details)
                     // devices are SD, and that everything else is USB
                     int flags = source->getFlags();
-                    if (major == kMajorBlockMmc || IsVirtioBlkDevice(major)) {
+                    LOG(VERBOSE) << "handleBlockEvent with action  kAdd flags" << flags;
+                    std::string::size_type share_block_path = eventPath.find("mmcblkshared1");
+                    if(share_block_path != std::string::npos){
+                        flags |= android::vold::Disk::Flags::kShareBlock;
+                    }else if (major == kMajorBlockMmc || IsVirtioBlkDevice(major)) {
                         flags |= android::vold::Disk::Flags::kSd;
+                    }else if (major == kMajorBlockPcie) {
+                        flags |= android::vold::Disk::Flags::kPcie;
                     } else {
-                        flags |= android::vold::Disk::Flags::kUsb;
+                        std::string removable_path(StringPrintf("/sys/%s", eventPath.c_str()) + "/removable");
+                        //PLOG(WARNING) << "removable_path:" << removable_path;
+                        std::string removable = "1";//default is usb
+                        if (ReadFileToString(removable_path, &removable)) {
+                            removable = android::base::Trim(removable);
+                            //PLOG(WARNING) << "removable:" << removable;
+                            if(strcmp(removable.c_str(), "0") == 0){
+                                PLOG(WARNING) << "set Flags kHardDisk";
+                                flags |= android::vold::Disk::Flags::kHardDisk;
+                            }else{
+                                PLOG(WARNING) << "set Flags kUsb";
+                                flags |= android::vold::Disk::Flags::kUsb;
+                            }
+                        }else{
+                            PLOG(WARNING) << "Failed to read removable,set Flags KUsb";
+                            flags |= android::vold::Disk::Flags::kUsb;
+                        }
                     }
-
                     auto disk =
                         new android::vold::Disk(eventPath, device, source->getNickname(), flags);
                     handleDiskAdded(std::shared_ptr<android::vold::Disk>(disk));

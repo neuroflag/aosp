@@ -56,6 +56,9 @@ class Disk {
         /* Flag that disk is Stub disk, i.e., disk that is managed from outside
          * Android (e.g., ARC++). */
         kStub = 1 << 5,
+        kPcie = 1 << 6,
+        kHardDisk = 1 << 7,
+        kShareBlock = 1 << 8,
     };
 
     const std::string& getId() const { return mId; }
