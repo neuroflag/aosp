@@ -1,0 +1,1 @@
+/mnt/expand/(.*)/rondata(/.*)? u:object_r:rondata_file:s0

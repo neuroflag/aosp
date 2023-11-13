@@ -1,0 +1,4 @@
+type rondata_file, file_type;
+
+allow untrusted_app rondata_file:dir { read write execute };
+allow untrusted_app rondata_file:file { read write execute };
