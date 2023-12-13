@@ -176,7 +176,8 @@ status_t PrivateVolume::doMount() {
         PrepareDir(mPath + "/media", 0770, AID_MEDIA_RW, AID_MEDIA_RW, attrs) ||
         PrepareDir(mPath + "/media/0", 0770, AID_MEDIA_RW, AID_MEDIA_RW) ||
         PrepareDir(mPath + "/local", 0751, AID_ROOT, AID_ROOT) ||
-        PrepareDir(mPath + "/local/tmp", 0771, AID_SHELL, AID_SHELL)) {
+        PrepareDir(mPath + "/local/tmp", 0771, AID_SHELL, AID_SHELL) ||
+        PrepareDir(mPath + "/rondata", 0777, AID_SYSTEM, AID_SYSTEM)) {
         PLOG(ERROR) << getId() << " failed to prepare";
         return -EIO;
     }
